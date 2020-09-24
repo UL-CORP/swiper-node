@@ -180,7 +180,7 @@ func (c *Chat) updateChatFromGroupMembershipChanges(myID string, g *v1protocol.G
 
 // NextClockAndTimestamp returns the next clock value
 // and the current timestamp
-func (c *Chat) NextClockAndTimestamp(timesource TimeSource) (uint64, uint64) {
+func (c *Chat) NextClockAndTimestamp(timesource common.TimeSource) (uint64, uint64) {
 	clock := c.LastClockValue
 	timestamp := timesource.GetCurrentTime()
 	if clock == 0 || clock < timestamp {
@@ -191,7 +191,7 @@ func (c *Chat) NextClockAndTimestamp(timesource TimeSource) (uint64, uint64) {
 	return clock, timestamp
 }
 
-func (c *Chat) UpdateFromMessage(message *common.Message, timesource TimeSource) error {
+func (c *Chat) UpdateFromMessage(message *common.Message, timesource common.TimeSource) error {
 	c.Timestamp = int64(timesource.GetCurrentTime())
 
 	// If the clock of the last message is lower, we set the message
@@ -247,14 +247,14 @@ func oneToOneChatID(publicKey *ecdsa.PublicKey) string {
 	return types.EncodeHex(crypto.FromECDSAPub(publicKey))
 }
 
-func OneToOneFromPublicKey(pk *ecdsa.PublicKey, timesource TimeSource) *Chat {
+func OneToOneFromPublicKey(pk *ecdsa.PublicKey, timesource common.TimeSource) *Chat {
 	chatID := types.EncodeHex(crypto.FromECDSAPub(pk))
 	newChat := CreateOneToOneChat(chatID[:8], pk, timesource)
 
 	return &newChat
 }
 
-func CreateOneToOneChat(name string, publicKey *ecdsa.PublicKey, timesource TimeSource) Chat {
+func CreateOneToOneChat(name string, publicKey *ecdsa.PublicKey, timesource common.TimeSource) Chat {
 	return Chat{
 		ID:        oneToOneChatID(publicKey),
 		Name:      name,
@@ -264,7 +264,7 @@ func CreateOneToOneChat(name string, publicKey *ecdsa.PublicKey, timesource Time
 	}
 }
 
-func CreatePublicChat(name string, timesource TimeSource) Chat {
+func CreatePublicChat(name string, timesource common.TimeSource) Chat {
 	return Chat{
 		ID:        name,
 		Name:      name,
@@ -275,7 +275,7 @@ func CreatePublicChat(name string, timesource TimeSource) Chat {
 	}
 }
 
-func CreateProfileChat(name string, profile string, timesource TimeSource) Chat {
+func CreateProfileChat(name string, profile string, timesource common.TimeSource) Chat {
 	return Chat{
 		ID:        name,
 		Name:      name,
@@ -287,7 +287,7 @@ func CreateProfileChat(name string, profile string, timesource TimeSource) Chat 
 	}
 }
 
-func CreateGroupChat(timesource TimeSource) Chat {
+func CreateGroupChat(timesource common.TimeSource) Chat {
 	return Chat{
 		Active:    true,
 		Color:     chatColors[rand.Intn(len(chatColors))],

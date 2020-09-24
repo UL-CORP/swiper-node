@@ -2142,7 +2142,7 @@ type ReceivedMessageState struct {
 	// Response to the client
 	Response *MessengerResponse
 	// Timesource is a time source for clock values/timestamps.
-	Timesource TimeSource
+	Timesource common.TimeSource
 }
 
 func (m *Messenger) handleRetrievedMessages(chatWithMessages map[transport.Filter][]*types.Message) (*MessengerResponse, error) {
@@ -3475,11 +3475,11 @@ func (m *Messenger) SignMessage(message string) ([]byte, error) {
 	return crypto.Sign(hash, m.identity)
 }
 
-func (m *Messenger) getTimesource() TimeSource {
+func (m *Messenger) getTimesource() common.TimeSource {
 	return m.transport
 }
 
-func (m *Messenger) Timesource() TimeSource {
+func (m *Messenger) Timesource() common.TimeSource {
 	return m.getTimesource()
 }
 

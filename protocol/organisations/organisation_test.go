@@ -63,7 +63,7 @@ func (s *OrganisationSuite) TestHandleRequestJoin() {
 	// NO_MEMBRISHIP - INVITATION_ONLY -> Error
 	// NO_MEMBERSHIP - ON_REQUEST -> Success
 	// INVITATION_ONLY - NO_MEMBERSHIP -> Invalid
-	// INITATION_ONLY - INVITATION_ONLY -> Error
+	// INVITATION_ONLY - INVITATION_ONLY -> Error
 	// INVITATION_ONLY - ON_REQUEST -> Invalid
 	// ON_REQUEST - NO_MEMBRERSHIP -> Invalid
 	// ON_REQUEST - INVITATION_ONLY -> Error
@@ -206,12 +206,6 @@ func (s *OrganisationSuite) emptyOrganisationDescriptionWithChat() *protobuf.Org
 }
 
 func (s *OrganisationSuite) configOnRequest() Config {
-	description := s.emptyOrganisationDescription()
-	description.Permissions.Access = protobuf.OrganisationPermissions_ON_REQUEST
-	return Config{OrganisationDescription: description, PrivateKey: s.identity}
-}
-
-func (s *OrganisationSuite) configOnRequestWithChatID() Config {
 	description := s.emptyOrganisationDescription()
 	description.Permissions.Access = protobuf.OrganisationPermissions_ON_REQUEST
 	return Config{OrganisationDescription: description, PrivateKey: s.identity}
