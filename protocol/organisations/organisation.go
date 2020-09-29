@@ -78,6 +78,13 @@ func emptyOrganisationChanges() *OrganisationChanges {
 }
 
 func (o *Organisation) HandleOrganisationDescription(signer *ecdsa.PublicKey, description *protobuf.OrganisationDescription) (*OrganisationChanges, error) {
+	// TOOD: validate signer
+
+	err := ValidateOrganisationDescription(description)
+	if err != nil {
+		return nil, err
+	}
+
 	response := emptyOrganisationChanges()
 
 	if description.Clock <= o.config.OrganisationDescription.Clock {
