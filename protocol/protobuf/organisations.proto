@@ -9,6 +9,9 @@ message Grant {
   uint64 clock = 4;
 }
 
+message OrganisationMember {
+}
+
 message ChatMessageIdentity {
   // stubbing this, it's already been prepared in a different PR
   string ens_name = 1;
@@ -33,16 +36,15 @@ message OrganisationPermissions {
 
 message OrganisationDescription {
   uint64 clock = 1;
-  repeated bytes members = 2;
+  map<string,OrganisationMember> members = 2;
   OrganisationPermissions permissions = 3;
   ChatMessageIdentity identity = 5;
-  repeated OrganisationChat chats = 6;
+  map<string,OrganisationChat> chats = 6;
 }
 
 message OrganisationChat {
-  string chat_id = 1;
   uint64 clock = 2;
-  repeated bytes members = 3;
+  map<string,OrganisationMember> members = 3;
   OrganisationPermissions permissions = 4;
   ChatMessageIdentity identity = 5;
 }
