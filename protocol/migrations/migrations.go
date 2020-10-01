@@ -27,7 +27,7 @@
 // 1599641390_add_emoji_reactions_index.down.sql (67B)
 // 1599641390_add_emoji_reactions_index.up.sql (126B)
 // 1599720851_add_seen_index_remove_long_messages.down.sql (96B)
-// 1599720851_add_seen_index_remove_long_messages.up.sql (135B)
+// 1599720851_add_seen_index_remove_long_messages.up.sql (89B)
 // doc.go (850B)
 
 package migrations
@@ -637,7 +637,7 @@ func _1599720851_add_seen_index_remove_long_messagesDownSql() (*asset, error) {
 	return a, nil
 }
 
-var __1599720851_add_seen_index_remove_long_messagesUpSql = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\x72\x0e\x72\x75\x0c\x71\x55\xf0\xf4\x73\x71\x8d\x50\x28\x4e\x4d\xcd\x8b\xcf\xc9\x4f\x4e\xcc\x89\x4f\xce\x48\x2c\x89\xcf\x4c\x89\xcf\x4c\xa9\x50\xf0\xf7\x53\x28\x2d\x4e\x2d\x8a\xcf\x4d\x2d\x2e\x4e\x4c\x4f\x2d\xd6\x40\x51\xa2\x03\xd6\xa6\x69\xcd\x15\x1a\xe0\x02\x32\x0a\x49\x69\xb1\x42\xb0\x6b\x88\x42\x46\x66\x4a\xaa\x82\xad\x82\xa1\x42\xb8\x87\x6b\x90\xab\x42\x4e\x6a\x5e\x7a\x49\x86\x46\x49\x6a\x45\x89\xa6\x82\x9d\x82\x89\x81\xa5\x99\x35\x17\x20\x00\x00\xff\xff\xc8\xea\x07\xd7\x87\x00\x00\x00")
+var __1599720851_add_seen_index_remove_long_messagesUpSql = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\x72\x0e\x72\x75\x0c\x71\x55\xf0\xf4\x73\x71\x8d\x50\xf0\x74\x53\xf0\xf3\x0f\x51\x70\x8d\xf0\x0c\x0e\x09\x56\x28\x4e\x4d\xcd\x8b\xcf\xc9\x4f\x4e\xcc\x89\x4f\xce\x48\x2c\x89\xcf\x4c\x89\xcf\x4c\xa9\x50\xf0\xf7\x53\x28\x2d\x4e\x2d\x8a\xcf\x4d\x2d\x2e\x4e\x4c\x4f\x2d\xd6\x40\x51\xa2\x03\xd6\xa6\x69\xcd\x05\x08\x00\x00\xff\xff\x03\xfa\x18\xba\x59\x00\x00\x00")
 
 func _1599720851_add_seen_index_remove_long_messagesUpSqlBytes() ([]byte, error) {
 	return bindataRead(
@@ -652,8 +652,8 @@ func _1599720851_add_seen_index_remove_long_messagesUpSql() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "1599720851_add_seen_index_remove_long_messages.up.sql", size: 135, mode: os.FileMode(0644), modTime: time.Unix(1601538651, 0)}
-	a := &asset{bytes: bytes, info: info, digest: [32]uint8{0x6c, 0x9c, 0x5c, 0x11, 0xf4, 0x4f, 0x10, 0x5, 0xda, 0x90, 0xa5, 0xdf, 0xad, 0xc3, 0x73, 0xe6, 0x7, 0xd, 0x9b, 0x4b, 0x3d, 0xa4, 0xda, 0xc7, 0x2f, 0x3d, 0xec, 0x2, 0x2, 0xe0, 0x87, 0x55}}
+	info := bindataFileInfo{name: "1599720851_add_seen_index_remove_long_messages.up.sql", size: 89, mode: os.FileMode(0644), modTime: time.Unix(1601539621, 0)}
+	a := &asset{bytes: bytes, info: info, digest: [32]uint8{0x11, 0xe, 0xc9, 0x1b, 0x96, 0x74, 0x5, 0x73, 0xb4, 0xc1, 0xc4, 0x82, 0xed, 0x34, 0x43, 0xe6, 0x6, 0x60, 0x7c, 0xbd, 0x80, 0x9a, 0x3e, 0x62, 0xa, 0x4, 0x98, 0x16, 0x49, 0x43, 0x7e, 0x9b}}
 	return a, nil
 }
 
