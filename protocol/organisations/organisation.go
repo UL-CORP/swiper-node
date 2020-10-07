@@ -1,14 +1,17 @@
 package organisations
 
 import (
+	"bytes"
 	"crypto/ecdsa"
-	"sync"
 
 	"github.com/golang/protobuf/proto"
 
 	"github.com/status-im/status-go/eth-node/crypto"
+	"github.com/status-im/status-go/protocol/common"
 	"github.com/status-im/status-go/protocol/protobuf"
 )
+
+const signatureLength = 65
 
 type Config struct {
 	PrivateKey              *ecdsa.PrivateKey
@@ -17,12 +20,9 @@ type Config struct {
 }
 
 type Organisation struct {
-	ID       *ecdsa.PublicKey
 	Identity *protobuf.ChatMessageIdentity
 
-	config       *Config
-	membersMap   map[string]bool
-	membersMapMU sync.Mutex
+	config *Config
 }
 
 func New(config Config) *Organisation {
@@ -32,24 +32,10 @@ func New(config Config) *Organisation {
 }
 
 func (o *Organisation) initialize() {
-	o.membersMapMU.Lock()
-	defer o.membersMapMU.Unlock()
-	o.membersMap = make(map[string]bool)
 	if o.config.OrganisationDescription == nil {
 		o.config.OrganisationDescription = &protobuf.OrganisationDescription{}
 
 	}
-}
-
-func (o *Organisation) AddMember(key *ecdsa.PublicKey) *protobuf.OrganisationDescription {
-
-	return nil
-}
-
-func (o *Organisation) HasMember(key string) bool {
-	o.membersMapMU.Lock()
-	defer o.membersMapMU.Unlock()
-	return o.membersMap[key]
 }
 
 type OrganisationChatChanges struct {
@@ -75,6 +61,48 @@ func emptyOrganisationChanges() *OrganisationChanges {
 		ChatsAdded:    make(map[string]*protobuf.OrganisationChat),
 		ChatsModified: make(map[string]*OrganisationChatChanges),
 	}
+}
+
+func (o *Organisation) InviteUser(pk *ecdsa.PublicKey) (*protobuf.OrganisationInvitation, error) {
+	if o.config.PrivateKey == nil {
+		return nil, ErrNotAdmin
+	}
+	memberKey := common.PubkeyToHex(pk)
+
+	if _, ok := o.config.OrganisationDescription.Members[memberKey]; !ok {
+		o.config.OrganisationDescription.Members[memberKey] = &protobuf.OrganisationMember{}
+	}
+
+	response := &protobuf.OrganisationInvitation{Organisation: o.config.OrganisationDescription}
+	grant, err := o.buildGrant(pk, "")
+	if err != nil {
+		return nil, err
+	}
+	response.Grant = grant
+
+	return response, nil
+}
+
+func (o *Organisation) HasMember(pk *ecdsa.PublicKey) bool {
+	key := common.PubkeyToHex(pk)
+	_, ok := o.config.OrganisationDescription.Members[key]
+	return ok
+}
+
+func (o *Organisation) RemoveUserFromChat(pk *ecdsa.PublicKey, chatID string) (error, *protobuf.OrganisationDescription) {
+	return nil, nil
+}
+
+func (o *Organisation) RemoveUserFromOrg(pk *ecdsa.PublicKey) (error, *protobuf.OrganisationDescription) {
+	return nil, nil
+}
+
+func (o *Organisation) AcceptRequestToJoin(pk *ecdsa.PublicKey) (error, *protobuf.OrganisationRequestJoinResponse) {
+	return nil, nil
+}
+
+func (o *Organisation) DeclineRequestToJoin(pk *ecdsa.PublicKey) (error, *protobuf.OrganisationRequestJoinResponse) {
+	return nil, nil
 }
 
 func (o *Organisation) HandleOrganisationDescription(signer *ecdsa.PublicKey, description *protobuf.OrganisationDescription) (*OrganisationChanges, error) {
@@ -168,6 +196,8 @@ func (o *Organisation) HandleOrganisationDescription(signer *ecdsa.PublicKey, de
 
 	o.config.OrganisationDescription = description
 
+	// store
+
 	return response, nil
 }
 
@@ -187,7 +217,13 @@ func (o *Organisation) HandleRequestJoin(signer *ecdsa.PublicKey, request *proto
 		return o.handleRequestJoinWithChatID(signer, request)
 	}
 
-	return o.handleRequestJoinWithoutChatID(signer, request)
+	err := o.handleRequestJoinWithoutChatID(signer, request)
+	if err != nil {
+		return err
+	}
+
+	// Store request to join
+	return nil
 }
 
 func (o *Organisation) IsAdmin() bool {
@@ -224,9 +260,46 @@ func (o *Organisation) handleRequestJoinWithoutChatID(signer *ecdsa.PublicKey, r
 	return nil
 }
 
+func (o *Organisation) ID() []byte {
+	return crypto.CompressPubkey(o.config.ID)
+}
+func (o *Organisation) VerifyGrant(data []byte, chatID string) (bool, error) {
+	if len(data) <= signatureLength {
+		return false, ErrInvalidGrant
+	}
+	signature := data[:signatureLength]
+	payload := data[signatureLength:]
+	grant := &protobuf.Grant{}
+	err := proto.Unmarshal(payload, grant)
+	if err != nil {
+		return false, err
+	}
+
+	if grant.Clock == 0 {
+		return false, ErrInvalidGrant
+	}
+	if grant.MemberId == nil {
+		return false, ErrInvalidGrant
+	}
+	if !bytes.Equal(grant.OrganisationId, o.ID()) {
+		return false, ErrInvalidGrant
+	}
+
+	extractedPublicKey, err := crypto.SigToPub(crypto.Keccak256(payload), signature)
+	if err != nil {
+		return false, err
+	}
+
+	if !common.IsPubKeyEqual(o.config.ID, extractedPublicKey) {
+		return false, ErrInvalidGrant
+	}
+
+	return true, nil
+}
+
 func (o *Organisation) buildGrant(key *ecdsa.PublicKey, chatID string) ([]byte, error) {
 	grant := &protobuf.Grant{
-		OrganisationId: crypto.CompressPubkey(o.ID),
+		OrganisationId: o.ID(),
 		MemberId:       crypto.CompressPubkey(key),
 		ChatId:         chatID,
 		Clock:          o.config.OrganisationDescription.Clock,
@@ -238,5 +311,10 @@ func (o *Organisation) buildGrant(key *ecdsa.PublicKey, chatID string) ([]byte, 
 
 	signatureMaterial := crypto.Keccak256(marshaledGrant)
 
-	return crypto.Sign(signatureMaterial, o.config.PrivateKey)
+	signature, err := crypto.Sign(signatureMaterial, o.config.PrivateKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return append(signature, marshaledGrant...), nil
 }

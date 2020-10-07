@@ -58,6 +58,70 @@ func (s *OrganisationSuite) SetupTest() {
 
 }
 
+/*
+message OrganisationInvitation {
+  OrganisationDescription organisation = 1;
+  bytes grant = 2;
+} */
+
+func (s *OrganisationSuite) TestInviteUser() {
+	newMember, err := crypto.GenerateKey()
+	s.Require().NoError(err)
+
+	org := s.buildOrganisation(&s.identity.PublicKey)
+	org.config.PrivateKey = nil
+	// Not an admin
+	_, err = org.InviteUser(&s.member2.PublicKey)
+	s.Require().Equal(ErrNotAdmin, err)
+
+	// Add admin to organisation
+	org.config.PrivateKey = s.identity
+
+	response, err := org.InviteUser(&newMember.PublicKey)
+	s.Require().Nil(err)
+	s.Require().NotNil(response)
+
+	// Check member has been added
+	s.Require().True(org.HasMember(&newMember.PublicKey))
+
+	// Check member has been added to response
+	s.Require().NotNil(response.Organisation)
+	_, ok := response.Organisation.Members[common.PubkeyToHex(&newMember.PublicKey)]
+	s.Require().True(ok)
+
+	// Check grant validates
+	s.Require().NotNil(org.config.ID)
+	s.Require().NotNil(response.Grant)
+
+	valid, err := org.VerifyGrant(response.Grant, "")
+	s.Require().NoError(err)
+	s.Require().True(valid)
+}
+
+func (s *OrganisationSuite) TestRemoveUserFromChat() {
+	// TEST CASE 1: Not an admin
+	// TEST CASE 2: An admin, user in chat
+	// TEST CASE 3: An admin, user not in chat
+}
+
+func (s *OrganisationSuite) TestRemoveUserFormOrg() {
+	// TEST CASE 1: Not an admin
+	// TEST CASE 2: An admin, make sure user is removed from all chats
+}
+
+func (s *OrganisationSuite) TestAcceptRequestToJoin() {
+	// WHAT TO DO WITH ENS
+	// TEST CASE 1: Not an admin
+	// TEST CASE 2: No request to join
+	// TEST CASE 3: Valid
+}
+
+func (s *OrganisationSuite) TestDeclineRequestToJoin() {
+	// TEST CASE 1: Not an admin
+	// TEST CASE 2: No request to join
+	// TEST CASE 3: Valid
+}
+
 func (s *OrganisationSuite) TestHandleRequestJoin() {
 	description := &protobuf.OrganisationDescription{}
 
@@ -386,55 +450,88 @@ func (s *OrganisationSuite) emptyOrganisationDescriptionWithChat() *protobuf.Org
 func (s *OrganisationSuite) configOnRequest() Config {
 	description := s.emptyOrganisationDescription()
 	description.Permissions.Access = protobuf.OrganisationPermissions_ON_REQUEST
-	return Config{OrganisationDescription: description, PrivateKey: s.identity}
+	return Config{
+		ID:                      &s.identity.PublicKey,
+		OrganisationDescription: description,
+		PrivateKey:              s.identity,
+	}
 }
 
 func (s *OrganisationSuite) configInvitationOnly() Config {
 	description := s.emptyOrganisationDescription()
 	description.Permissions.Access = protobuf.OrganisationPermissions_INVITATION_ONLY
-	return Config{OrganisationDescription: description, PrivateKey: s.identity}
+	return Config{
+		ID:                      &s.identity.PublicKey,
+		OrganisationDescription: description,
+		PrivateKey:              s.identity,
+	}
 }
 
 func (s *OrganisationSuite) configNoMembershipOrgNoMembershipChat() Config {
 	description := s.emptyOrganisationDescriptionWithChat()
 	description.Permissions.Access = protobuf.OrganisationPermissions_NO_MEMBERSHIP
 	description.Chats[testChatID1].Permissions.Access = protobuf.OrganisationPermissions_NO_MEMBERSHIP
-	return Config{OrganisationDescription: description, PrivateKey: s.identity}
+	return Config{
+		ID:                      &s.identity.PublicKey,
+		OrganisationDescription: description,
+		PrivateKey:              s.identity,
+	}
+
 }
 
 func (s *OrganisationSuite) configNoMembershipOrgInvitationOnlyChat() Config {
 	description := s.emptyOrganisationDescriptionWithChat()
 	description.Permissions.Access = protobuf.OrganisationPermissions_NO_MEMBERSHIP
 	description.Chats[testChatID1].Permissions.Access = protobuf.OrganisationPermissions_INVITATION_ONLY
-	return Config{OrganisationDescription: description, PrivateKey: s.identity}
+	return Config{
+		ID:                      &s.identity.PublicKey,
+		OrganisationDescription: description,
+		PrivateKey:              s.identity,
+	}
 }
 
 func (s *OrganisationSuite) configInvitationOnlyOrgInvitationOnlyChat() Config {
 	description := s.emptyOrganisationDescriptionWithChat()
 	description.Permissions.Access = protobuf.OrganisationPermissions_INVITATION_ONLY
 	description.Chats[testChatID1].Permissions.Access = protobuf.OrganisationPermissions_INVITATION_ONLY
-	return Config{OrganisationDescription: description, PrivateKey: s.identity}
+	return Config{
+		ID:                      &s.identity.PublicKey,
+		OrganisationDescription: description,
+		PrivateKey:              s.identity,
+	}
 }
 
 func (s *OrganisationSuite) configNoMembershipOrgOnRequestChat() Config {
 	description := s.emptyOrganisationDescriptionWithChat()
 	description.Permissions.Access = protobuf.OrganisationPermissions_NO_MEMBERSHIP
 	description.Chats[testChatID1].Permissions.Access = protobuf.OrganisationPermissions_ON_REQUEST
-	return Config{OrganisationDescription: description, PrivateKey: s.identity}
+	return Config{
+		ID:                      &s.identity.PublicKey,
+		OrganisationDescription: description,
+		PrivateKey:              s.identity,
+	}
 }
 
 func (s *OrganisationSuite) configOnRequestOrgOnRequestChat() Config {
 	description := s.emptyOrganisationDescriptionWithChat()
 	description.Permissions.Access = protobuf.OrganisationPermissions_ON_REQUEST
 	description.Chats[testChatID1].Permissions.Access = protobuf.OrganisationPermissions_ON_REQUEST
-	return Config{OrganisationDescription: description, PrivateKey: s.identity}
+	return Config{
+		ID:                      &s.identity.PublicKey,
+		OrganisationDescription: description,
+		PrivateKey:              s.identity,
+	}
 }
 
 func (s *OrganisationSuite) configOnRequestOrgInvitationOnlyChat() Config {
 	description := s.emptyOrganisationDescriptionWithChat()
 	description.Permissions.Access = protobuf.OrganisationPermissions_ON_REQUEST
 	description.Chats[testChatID1].Permissions.Access = protobuf.OrganisationPermissions_INVITATION_ONLY
-	return Config{OrganisationDescription: description, PrivateKey: s.identity}
+	return Config{
+		ID:                      &s.identity.PublicKey,
+		OrganisationDescription: description,
+		PrivateKey:              s.identity,
+	}
 }
 
 func (s *OrganisationSuite) configChatENSOnly() Config {
@@ -442,14 +539,22 @@ func (s *OrganisationSuite) configChatENSOnly() Config {
 	description.Permissions.Access = protobuf.OrganisationPermissions_ON_REQUEST
 	description.Chats[testChatID1].Permissions.Access = protobuf.OrganisationPermissions_ON_REQUEST
 	description.Chats[testChatID1].Permissions.EnsOnly = true
-	return Config{OrganisationDescription: description, PrivateKey: s.identity}
+	return Config{
+		ID:                      &s.identity.PublicKey,
+		OrganisationDescription: description,
+		PrivateKey:              s.identity,
+	}
 }
 
 func (s *OrganisationSuite) configENSOnly() Config {
 	description := s.emptyOrganisationDescription()
 	description.Permissions.Access = protobuf.OrganisationPermissions_ON_REQUEST
 	description.Permissions.EnsOnly = true
-	return Config{OrganisationDescription: description, PrivateKey: s.identity}
+	return Config{
+		ID:                      &s.identity.PublicKey,
+		OrganisationDescription: description,
+		PrivateKey:              s.identity,
+	}
 }
 
 func (s *OrganisationSuite) config() Config {
