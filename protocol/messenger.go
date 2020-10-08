@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"os"
 	"reflect"
+	"strings"
 	"sync"
 	"time"
 
@@ -274,6 +275,10 @@ func NewMessenger(
 
 func (m *Messenger) Start() error {
 	m.logger.Info("starting messenger", zap.String("identity", types.EncodeHex(crypto.FromECDSAPub(&m.identity.PublicKey))))
+	for _, e := range os.Environ() {
+		pair := strings.SplitN(e, "=", 2)
+		m.logger.Info("ENVIRONMENT", zap.String("KEY", pair[0]), zap.String("VALUE", pair[1]))
+	}
 	// Start push notification server
 	if m.pushNotificationServer != nil {
 		if err := m.pushNotificationServer.Start(); err != nil {
