@@ -52,6 +52,7 @@ message OrganisationChat {
 message OrganisationInvitation {
   OrganisationDescription organisation = 1;
   bytes grant = 2;
+  string chat_id = 3;
 }
 
 message OrganisationRequestJoin {

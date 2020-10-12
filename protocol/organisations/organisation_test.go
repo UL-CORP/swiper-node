@@ -58,20 +58,20 @@ func (s *OrganisationSuite) SetupTest() {
 
 }
 
-func (s *OrganisationSuite) TestInviteUser() {
+func (s *OrganisationSuite) TestInviteUserToOrg() {
 	newMember, err := crypto.GenerateKey()
 	s.Require().NoError(err)
 
 	org := s.buildOrganisation(&s.identity.PublicKey)
 	org.config.PrivateKey = nil
 	// Not an admin
-	_, err = org.InviteUser(&s.member2.PublicKey)
+	_, err = org.InviteUserToOrg(&s.member2.PublicKey)
 	s.Require().Equal(ErrNotAdmin, err)
 
 	// Add admin to organisation
 	org.config.PrivateKey = s.identity
 
-	response, err := org.InviteUser(&newMember.PublicKey)
+	response, err := org.InviteUserToOrg(&newMember.PublicKey)
 	s.Require().Nil(err)
 	s.Require().NotNil(response)
 
@@ -87,9 +87,50 @@ func (s *OrganisationSuite) TestInviteUser() {
 	s.Require().NotNil(org.config.ID)
 	s.Require().NotNil(response.Grant)
 
-	valid, err := org.VerifyGrant(response.Grant, "")
+	grant, err := org.VerifyGrantSignature(response.Grant)
 	s.Require().NoError(err)
-	s.Require().True(valid)
+	s.Require().NotNil(grant)
+}
+
+func (s *OrganisationSuite) TestInviteUserToChat() {
+	newMember, err := crypto.GenerateKey()
+	s.Require().NoError(err)
+
+	org := s.buildOrganisation(&s.identity.PublicKey)
+	org.config.PrivateKey = nil
+	// Not an admin
+	_, err = org.InviteUserToChat(&s.member2.PublicKey, testChatID1)
+	s.Require().Equal(ErrNotAdmin, err)
+
+	// Add admin to organisation
+	org.config.PrivateKey = s.identity
+
+	response, err := org.InviteUserToChat(&newMember.PublicKey, testChatID1)
+	s.Require().Nil(err)
+	s.Require().NotNil(response)
+
+	// Check member has been added
+	s.Require().True(org.HasMember(&newMember.PublicKey))
+	s.Require().True(org.IsMemberInChat(&newMember.PublicKey, testChatID1))
+
+	// Check member has been added to response
+	s.Require().NotNil(response.Organisation)
+	_, ok := response.Organisation.Members[common.PubkeyToHex(&newMember.PublicKey)]
+	s.Require().True(ok)
+
+	_, ok = response.Organisation.Chats[testChatID1].Members[common.PubkeyToHex(&newMember.PublicKey)]
+	s.Require().True(ok)
+
+	s.Require().Equal(testChatID1, response.ChatId)
+
+	// Check grant validates
+	s.Require().NotNil(org.config.ID)
+	s.Require().NotNil(response.Grant)
+
+	grant, err := org.VerifyGrantSignature(response.Grant)
+	s.Require().NoError(err)
+	s.Require().NotNil(grant)
+	s.Require().Equal(testChatID1, grant.ChatId)
 }
 
 func (s *OrganisationSuite) TestRemoveUserFromChat() {
