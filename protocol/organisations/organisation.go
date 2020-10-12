@@ -62,6 +62,42 @@ func emptyOrganisationChanges() *OrganisationChanges {
 	}
 }
 
+func (o *Organisation) CreateChat(chatID string, chat *protobuf.OrganisationChat) (*protobuf.OrganisationDescription, error) {
+	if o.config.PrivateKey == nil {
+		return nil, ErrNotAdmin
+	}
+
+	if o.config.OrganisationDescription.Chats == nil {
+		o.config.OrganisationDescription.Chats = make(map[string]*protobuf.OrganisationChat)
+	}
+	if _, ok := o.config.OrganisationDescription.Chats[chatID]; ok {
+		return nil, ErrChatAlreadyExists
+	}
+	clock := o.nextClock()
+	chat.Clock = clock
+
+	o.config.OrganisationDescription.Chats[chatID] = chat
+	o.config.OrganisationDescription.Clock = clock
+
+	return o.config.OrganisationDescription, nil
+}
+
+func (o *Organisation) DeleteChat(chatID string) (*protobuf.OrganisationDescription, error) {
+	if o.config.PrivateKey == nil {
+		return nil, ErrNotAdmin
+	}
+
+	if o.config.OrganisationDescription.Chats == nil {
+		o.config.OrganisationDescription.Chats = make(map[string]*protobuf.OrganisationChat)
+	}
+	delete(o.config.OrganisationDescription.Chats, chatID)
+	clock := o.nextClock()
+
+	o.config.OrganisationDescription.Clock = clock
+
+	return o.config.OrganisationDescription, nil
+}
+
 func (o *Organisation) InviteUserToOrg(pk *ecdsa.PublicKey) (*protobuf.OrganisationInvitation, error) {
 	if o.config.PrivateKey == nil {
 		return nil, ErrNotAdmin
@@ -407,4 +443,8 @@ func (o *Organisation) buildGrant(key *ecdsa.PublicKey, chatID string) ([]byte, 
 	}
 
 	return append(signature, marshaledGrant...), nil
+}
+
+func (o *Organisation) nextClock() uint64 {
+	return o.config.OrganisationDescription.Clock + 1
 }

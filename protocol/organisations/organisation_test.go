@@ -92,6 +92,60 @@ func (s *OrganisationSuite) TestInviteUserToOrg() {
 	s.Require().NotNil(grant)
 }
 
+func (s *OrganisationSuite) TestCreateChat() {
+	newChatID := "new-chat-id"
+	org := s.buildOrganisation(&s.identity.PublicKey)
+	org.config.PrivateKey = nil
+
+	identity := &protobuf.ChatIdentity{
+		DisplayName: "new-chat-display-name",
+		Description: "new-chat-description",
+	}
+	permissions := &protobuf.OrganisationPermissions{
+		Access: protobuf.OrganisationPermissions_NO_MEMBERSHIP,
+	}
+
+	_, err := org.CreateChat(newChatID, &protobuf.OrganisationChat{
+		Identity:    identity,
+		Permissions: permissions,
+	})
+
+	s.Require().Equal(ErrNotAdmin, err)
+
+	org.config.PrivateKey = s.identity
+
+	description, err := org.CreateChat(newChatID, &protobuf.OrganisationChat{
+		Identity:    identity,
+		Permissions: permissions,
+	})
+
+	s.Require().NoError(err)
+	s.Require().NotNil(description)
+
+	s.Require().NotNil(description.Chats[newChatID])
+	s.Require().NotEmpty(description.Chats[newChatID].Clock)
+	s.Require().Equal(permissions, description.Chats[newChatID].Permissions)
+	s.Require().Equal(identity, description.Chats[newChatID].Identity)
+	s.Require().Equal(description.Clock, description.Chats[newChatID].Clock)
+}
+
+func (s *OrganisationSuite) TestDeleteChat() {
+	org := s.buildOrganisation(&s.identity.PublicKey)
+	org.config.PrivateKey = nil
+
+	_, err := org.DeleteChat(testChatID1)
+	s.Require().Equal(ErrNotAdmin, err)
+
+	org.config.PrivateKey = s.identity
+
+	description, err := org.DeleteChat(testChatID1)
+	s.Require().NoError(err)
+	s.Require().NotNil(description)
+
+	s.Require().Nil(description.Chats[testChatID1])
+	s.Require().Equal(uint64(2), description.Clock)
+}
+
 func (s *OrganisationSuite) TestInviteUserToChat() {
 	newMember, err := crypto.GenerateKey()
 	s.Require().NoError(err)
