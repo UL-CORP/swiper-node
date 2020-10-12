@@ -218,7 +218,9 @@ func (o *Organisation) DeclineRequestToJoin(pk *ecdsa.PublicKey) (*protobuf.Orga
 }
 
 func (o *Organisation) HandleOrganisationDescription(signer *ecdsa.PublicKey, description *protobuf.OrganisationDescription) (*OrganisationChanges, error) {
-	// TOOD: validate signer
+	if !common.IsPubKeyEqual(o.config.ID, signer) {
+		return nil, ErrNotAuthorized
+	}
 
 	err := ValidateOrganisationDescription(description)
 	if err != nil {
