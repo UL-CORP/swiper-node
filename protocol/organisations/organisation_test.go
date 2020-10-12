@@ -58,12 +58,6 @@ func (s *OrganisationSuite) SetupTest() {
 
 }
 
-/*
-message OrganisationInvitation {
-  OrganisationDescription organisation = 1;
-  bytes grant = 2;
-} */
-
 func (s *OrganisationSuite) TestInviteUser() {
 	newMember, err := crypto.GenerateKey()
 	s.Require().NoError(err)
@@ -99,14 +93,55 @@ func (s *OrganisationSuite) TestInviteUser() {
 }
 
 func (s *OrganisationSuite) TestRemoveUserFromChat() {
-	// TEST CASE 1: Not an admin
-	// TEST CASE 2: An admin, user in chat
-	// TEST CASE 3: An admin, user not in chat
+	org := s.buildOrganisation(&s.identity.PublicKey)
+	org.config.PrivateKey = nil
+	// Not an admin
+	_, err := org.RemoveUserFromOrg(&s.member1.PublicKey)
+	s.Require().Equal(ErrNotAdmin, err)
+
+	// Add admin to organisation
+	org.config.PrivateKey = s.identity
+
+	actualOrganisation, err := org.RemoveUserFromChat(&s.member1.PublicKey, testChatID1)
+	s.Require().Nil(err)
+	s.Require().NotNil(actualOrganisation)
+
+	// Check member has not been removed
+	s.Require().True(org.HasMember(&s.member1.PublicKey))
+
+	// Check member has not been removed from org
+	_, ok := actualOrganisation.Members[common.PubkeyToHex(&s.member1.PublicKey)]
+	s.Require().True(ok)
+
+	// Check member has been removed from chat
+	_, ok = actualOrganisation.Chats[testChatID1].Members[common.PubkeyToHex(&s.member1.PublicKey)]
+	s.Require().False(ok)
 }
 
 func (s *OrganisationSuite) TestRemoveUserFormOrg() {
-	// TEST CASE 1: Not an admin
-	// TEST CASE 2: An admin, make sure user is removed from all chats
+	org := s.buildOrganisation(&s.identity.PublicKey)
+	org.config.PrivateKey = nil
+	// Not an admin
+	_, err := org.RemoveUserFromOrg(&s.member1.PublicKey)
+	s.Require().Equal(ErrNotAdmin, err)
+
+	// Add admin to organisation
+	org.config.PrivateKey = s.identity
+
+	actualOrganisation, err := org.RemoveUserFromOrg(&s.member1.PublicKey)
+	s.Require().Nil(err)
+	s.Require().NotNil(actualOrganisation)
+
+	// Check member has been removed
+	s.Require().False(org.HasMember(&s.member1.PublicKey))
+
+	// Check member has been removed from org
+	_, ok := actualOrganisation.Members[common.PubkeyToHex(&s.member1.PublicKey)]
+	s.Require().False(ok)
+
+	// Check member has been removed from chat
+	_, ok = actualOrganisation.Chats[testChatID1].Members[common.PubkeyToHex(&s.member1.PublicKey)]
+	s.Require().False(ok)
 }
 
 func (s *OrganisationSuite) TestAcceptRequestToJoin() {

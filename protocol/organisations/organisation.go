@@ -89,19 +89,50 @@ func (o *Organisation) HasMember(pk *ecdsa.PublicKey) bool {
 	return ok
 }
 
-func (o *Organisation) RemoveUserFromChat(pk *ecdsa.PublicKey, chatID string) (error, *protobuf.OrganisationDescription) {
+func (o *Organisation) RemoveUserFromChat(pk *ecdsa.PublicKey, chatID string) (*protobuf.OrganisationDescription, error) {
+	if o.config.PrivateKey == nil {
+		return nil, ErrNotAdmin
+	}
+	if !o.HasMember(pk) {
+		return o.config.OrganisationDescription, nil
+	}
+
+	chat, ok := o.config.OrganisationDescription.Chats[chatID]
+	if !ok {
+		return o.config.OrganisationDescription, nil
+	}
+
+	key := common.PubkeyToHex(pk)
+	delete(chat.Members, key)
+
+	return o.config.OrganisationDescription, nil
+}
+
+func (o *Organisation) RemoveUserFromOrg(pk *ecdsa.PublicKey) (*protobuf.OrganisationDescription, error) {
+	if o.config.PrivateKey == nil {
+		return nil, ErrNotAdmin
+	}
+	if !o.HasMember(pk) {
+		return o.config.OrganisationDescription, nil
+	}
+	key := common.PubkeyToHex(pk)
+
+	// Remove from org
+	delete(o.config.OrganisationDescription.Members, key)
+
+	// Remove from chats
+	for _, chat := range o.config.OrganisationDescription.Chats {
+		delete(chat.Members, key)
+	}
+
+	return o.config.OrganisationDescription, nil
+}
+
+func (o *Organisation) AcceptRequestToJoin(pk *ecdsa.PublicKey) (*protobuf.OrganisationRequestJoinResponse, error) {
 	return nil, nil
 }
 
-func (o *Organisation) RemoveUserFromOrg(pk *ecdsa.PublicKey) (error, *protobuf.OrganisationDescription) {
-	return nil, nil
-}
-
-func (o *Organisation) AcceptRequestToJoin(pk *ecdsa.PublicKey) (error, *protobuf.OrganisationRequestJoinResponse) {
-	return nil, nil
-}
-
-func (o *Organisation) DeclineRequestToJoin(pk *ecdsa.PublicKey) (error, *protobuf.OrganisationRequestJoinResponse) {
+func (o *Organisation) DeclineRequestToJoin(pk *ecdsa.PublicKey) (*protobuf.OrganisationRequestJoinResponse, error) {
 	return nil, nil
 }
 
