@@ -7,6 +7,7 @@ import (
 	"github.com/golang/protobuf/proto"
 
 	"github.com/status-im/status-go/eth-node/crypto"
+	"github.com/status-im/status-go/eth-node/types"
 	"github.com/status-im/status-go/protocol/common"
 	"github.com/status-im/status-go/protocol/protobuf"
 )
@@ -376,6 +377,10 @@ func (o *Organisation) handleRequestJoinWithoutChatID(signer *ecdsa.PublicKey, r
 
 func (o *Organisation) ID() []byte {
 	return crypto.CompressPubkey(o.config.ID)
+}
+
+func (o *Organisation) IDString() string {
+	return types.EncodeHex(o.ID())
 }
 
 func (o *Organisation) PrivateKey() *ecdsa.PrivateKey {

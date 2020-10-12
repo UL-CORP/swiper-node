@@ -18,6 +18,7 @@ import (
 	"github.com/status-im/status-go/protocol"
 	"github.com/status-im/status-go/protocol/common"
 	"github.com/status-im/status-go/protocol/encryption/multidevice"
+	"github.com/status-im/status-go/protocol/organisations"
 	"github.com/status-im/status-go/protocol/protobuf"
 	"github.com/status-im/status-go/protocol/pushnotificationclient"
 	"github.com/status-im/status-go/protocol/transport"
@@ -314,6 +315,10 @@ func (api *PublicAPI) GetOurInstallations() []*multidevice.Installation {
 // SetInstallationMetadata sets the metadata for our own installation
 func (api *PublicAPI) SetInstallationMetadata(installationID string, data *multidevice.InstallationMetadata) error {
 	return api.service.messenger.SetInstallationMetadata(installationID, data)
+}
+
+func (api *PublicAPI) Organisations(parent context.Context) []*organisations.Organisation {
+	return api.service.messenger.Organisations()
 }
 
 type ApplicationMessagesResponse struct {
