@@ -1,5 +1,7 @@
 syntax = "proto3";
 
+import "chat_identity.proto";
+
 package protobuf;
 
 message Grant {
@@ -10,14 +12,6 @@ message Grant {
 }
 
 message OrganisationMember {
-}
-
-message ChatMessageIdentity {
-  // stubbing this, it's already been prepared in a different PR
-  string ens_name = 1;
-  string profile_picture = 2; // not a string, more complex data structure, but you get the point
-  string display_name = 3;
-  string description = 4; // this is actually unique to an organisation, and chatMessageIdentity might want to be updated, or similar
 }
 
 message OrganisationPermissions {
@@ -38,7 +32,7 @@ message OrganisationDescription {
   uint64 clock = 1;
   map<string,OrganisationMember> members = 2;
   OrganisationPermissions permissions = 3;
-  ChatMessageIdentity identity = 5;
+  ChatIdentity identity = 5;
   map<string,OrganisationChat> chats = 6;
 }
 
@@ -46,7 +40,7 @@ message OrganisationChat {
   uint64 clock = 2;
   map<string,OrganisationMember> members = 3;
   OrganisationPermissions permissions = 4;
-  ChatMessageIdentity identity = 5;
+  ChatIdentity identity = 5;
 }
 
 message OrganisationInvitation {

@@ -14,14 +14,13 @@ import (
 const signatureLength = 65
 
 type Config struct {
-	PrivateKey              *ecdsa.PrivateKey
-	OrganisationDescription *protobuf.OrganisationDescription
-	ID                      *ecdsa.PublicKey
+	PrivateKey                       *ecdsa.PrivateKey
+	OrganisationDescription          *protobuf.OrganisationDescription
+	MarshaledOrganisationDescription []byte
+	ID                               *ecdsa.PublicKey
 }
 
 type Organisation struct {
-	Identity *protobuf.ChatMessageIdentity
-
 	config *Config
 }
 
@@ -340,6 +339,20 @@ func (o *Organisation) handleRequestJoinWithoutChatID(signer *ecdsa.PublicKey, r
 func (o *Organisation) ID() []byte {
 	return crypto.CompressPubkey(o.config.ID)
 }
+
+func (o *Organisation) PrivateKey() *ecdsa.PrivateKey {
+	return o.config.PrivateKey
+}
+
+func (o *Organisation) DescriptionBytes() ([]byte, error) {
+
+	if len(o.config.MarshaledOrganisationDescription) != 0 {
+		return o.config.MarshaledOrganisationDescription, nil
+	}
+
+	return proto.Marshal(o.config.OrganisationDescription)
+}
+
 func (o *Organisation) VerifyGrantSignature(data []byte) (*protobuf.Grant, error) {
 	if len(data) <= signatureLength {
 		return nil, ErrInvalidGrant
