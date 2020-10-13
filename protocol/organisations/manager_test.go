@@ -23,11 +23,16 @@ type ManagerSuite struct {
 func (s *ManagerSuite) SetupTest() {
 	db, err := sqlite.OpenInMemory()
 	s.Require().NoError(err)
-	s.manager = NewManager(db)
+	m, err := NewManager(db, nil)
+	s.Require().NoError(err)
+	s.manager = m
 }
 
 func (s *ManagerSuite) TestCreateOrganisation() {
 	description := &protobuf.OrganisationDescription{
+		Permissions: &protobuf.OrganisationPermissions{
+			Access: protobuf.OrganisationPermissions_NO_MEMBERSHIP,
+		},
 		Identity: &protobuf.ChatIdentity{
 			DisplayName: "status",
 			Description: "status organisation description",

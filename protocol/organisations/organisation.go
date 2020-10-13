@@ -3,6 +3,7 @@ package organisations
 import (
 	"bytes"
 	"crypto/ecdsa"
+	"encoding/json"
 
 	"github.com/golang/protobuf/proto"
 
@@ -20,6 +21,7 @@ type Config struct {
 	OrganisationDescription          *protobuf.OrganisationDescription
 	MarshaledOrganisationDescription []byte
 	ID                               *ecdsa.PublicKey
+	Joined                           bool
 }
 
 type Organisation struct {
@@ -30,6 +32,19 @@ func New(config Config) *Organisation {
 	organisation := &Organisation{config: &config}
 	organisation.initialize()
 	return organisation
+}
+
+func (o *Organisation) MarshalJSON() ([]byte, error) {
+	item := struct {
+		ID                                string `json:"id"`
+		*protobuf.OrganisationDescription `json:"description"`
+		Joined                            bool `json:"joined"`
+	}{
+		ID:                      o.IDString(),
+		OrganisationDescription: o.config.OrganisationDescription,
+		Joined:                  o.config.Joined,
+	}
+	return json.Marshal(item)
 }
 
 func (o *Organisation) initialize() {
@@ -64,9 +79,14 @@ func emptyOrganisationChanges() *OrganisationChanges {
 	}
 }
 
-func (o *Organisation) CreateChat(chatID string, chat *protobuf.OrganisationChat) (*protobuf.OrganisationDescription, error) {
+func (o *Organisation) CreateChat(chatID string, chat *protobuf.OrganisationChat) (*OrganisationChanges, error) {
 	if o.config.PrivateKey == nil {
 		return nil, ErrNotAdmin
+	}
+
+	err := validateOrganisationChat(o.config.OrganisationDescription, chat)
+	if err != nil {
+		return nil, err
 	}
 
 	if o.config.OrganisationDescription.Chats == nil {
@@ -81,7 +101,9 @@ func (o *Organisation) CreateChat(chatID string, chat *protobuf.OrganisationChat
 	o.config.OrganisationDescription.Chats[chatID] = chat
 	o.config.OrganisationDescription.Clock = clock
 
-	return o.config.OrganisationDescription, nil
+	changes := emptyOrganisationChanges()
+	changes.ChatsAdded[chatID] = chat
+	return changes, nil
 }
 
 func (o *Organisation) DeleteChat(chatID string) (*protobuf.OrganisationDescription, error) {
@@ -219,6 +241,14 @@ func (o *Organisation) DeclineRequestToJoin(pk *ecdsa.PublicKey) (*protobuf.Orga
 	return nil, nil
 }
 
+func (o *Organisation) Join() {
+	o.config.Joined = true
+}
+
+func (o *Organisation) Leave() {
+	o.config.Joined = false
+}
+
 func (o *Organisation) HandleOrganisationDescription(signer *ecdsa.PublicKey, description *protobuf.OrganisationDescription) (*OrganisationChanges, error) {
 	if !common.IsPubKeyEqual(o.config.ID, signer) {
 		return nil, ErrNotAuthorized
@@ -235,84 +265,85 @@ func (o *Organisation) HandleOrganisationDescription(signer *ecdsa.PublicKey, de
 		return response, nil
 	}
 
-	// Check for new members at the org level
-	for pk, member := range description.Members {
-		if _, ok := o.config.OrganisationDescription.Members[pk]; !ok {
-			if response.MembersAdded == nil {
-				response.MembersAdded = make(map[string]*protobuf.OrganisationMember)
-			}
-			response.MembersAdded[pk] = member
-		}
-	}
-
-	// Check for removed members at the org level
-	for pk, member := range o.config.OrganisationDescription.Members {
-		if _, ok := description.Members[pk]; !ok {
-			if response.MembersRemoved == nil {
-				response.MembersRemoved = make(map[string]*protobuf.OrganisationMember)
-			}
-			response.MembersRemoved[pk] = member
-		}
-	}
-
-	// check for removed chats
-	for chatID, chat := range o.config.OrganisationDescription.Chats {
-		if description.Chats == nil {
-			description.Chats = make(map[string]*protobuf.OrganisationChat)
-		}
-		if _, ok := description.Chats[chatID]; !ok {
-			if response.ChatsRemoved == nil {
-				response.ChatsRemoved = make(map[string]*protobuf.OrganisationChat)
-			}
-
-			response.ChatsRemoved[chatID] = chat
-		}
-	}
-
-	for chatID, chat := range description.Chats {
-		if o.config.OrganisationDescription.Chats == nil {
-			o.config.OrganisationDescription.Chats = make(map[string]*protobuf.OrganisationChat)
-		}
-		if _, ok := o.config.OrganisationDescription.Chats[chatID]; !ok {
-			if response.ChatsAdded == nil {
-				response.ChatsAdded = make(map[string]*protobuf.OrganisationChat)
-			}
-
-			response.ChatsAdded[chatID] = chat
-		} else {
-			// Check for members added
-			for pk, member := range description.Chats[chatID].Members {
-				if _, ok := o.config.OrganisationDescription.Chats[chatID].Members[pk]; !ok {
-					if response.ChatsModified[chatID] == nil {
-						response.ChatsModified[chatID] = &OrganisationChatChanges{
-							MembersAdded:   make(map[string]*protobuf.OrganisationMember),
-							MembersRemoved: make(map[string]*protobuf.OrganisationMember),
-						}
-					}
-
-					response.ChatsModified[chatID].MembersAdded[pk] = member
+	// We only calculate changes if we joined the org, otherwise not interested
+	if o.config.Joined {
+		// Check for new members at the org level
+		for pk, member := range description.Members {
+			if _, ok := o.config.OrganisationDescription.Members[pk]; !ok {
+				if response.MembersAdded == nil {
+					response.MembersAdded = make(map[string]*protobuf.OrganisationMember)
 				}
+				response.MembersAdded[pk] = member
 			}
+		}
 
-			// check for members removed
-			for pk, member := range o.config.OrganisationDescription.Chats[chatID].Members {
-				if _, ok := description.Chats[chatID].Members[pk]; !ok {
-					if response.ChatsModified[chatID] == nil {
-						response.ChatsModified[chatID] = &OrganisationChatChanges{
-							MembersAdded:   make(map[string]*protobuf.OrganisationMember),
-							MembersRemoved: make(map[string]*protobuf.OrganisationMember),
+		// Check for removed members at the org level
+		for pk, member := range o.config.OrganisationDescription.Members {
+			if _, ok := description.Members[pk]; !ok {
+				if response.MembersRemoved == nil {
+					response.MembersRemoved = make(map[string]*protobuf.OrganisationMember)
+				}
+				response.MembersRemoved[pk] = member
+			}
+		}
+
+		// check for removed chats
+		for chatID, chat := range o.config.OrganisationDescription.Chats {
+			if description.Chats == nil {
+				description.Chats = make(map[string]*protobuf.OrganisationChat)
+			}
+			if _, ok := description.Chats[chatID]; !ok {
+				if response.ChatsRemoved == nil {
+					response.ChatsRemoved = make(map[string]*protobuf.OrganisationChat)
+				}
+
+				response.ChatsRemoved[chatID] = chat
+			}
+		}
+
+		for chatID, chat := range description.Chats {
+			if o.config.OrganisationDescription.Chats == nil {
+				o.config.OrganisationDescription.Chats = make(map[string]*protobuf.OrganisationChat)
+			}
+			if _, ok := o.config.OrganisationDescription.Chats[chatID]; !ok {
+				if response.ChatsAdded == nil {
+					response.ChatsAdded = make(map[string]*protobuf.OrganisationChat)
+				}
+
+				response.ChatsAdded[chatID] = chat
+			} else {
+				// Check for members added
+				for pk, member := range description.Chats[chatID].Members {
+					if _, ok := o.config.OrganisationDescription.Chats[chatID].Members[pk]; !ok {
+						if response.ChatsModified[chatID] == nil {
+							response.ChatsModified[chatID] = &OrganisationChatChanges{
+								MembersAdded:   make(map[string]*protobuf.OrganisationMember),
+								MembersRemoved: make(map[string]*protobuf.OrganisationMember),
+							}
 						}
-					}
 
-					response.ChatsModified[chatID].MembersRemoved[pk] = member
+						response.ChatsModified[chatID].MembersAdded[pk] = member
+					}
+				}
+
+				// check for members removed
+				for pk, member := range o.config.OrganisationDescription.Chats[chatID].Members {
+					if _, ok := description.Chats[chatID].Members[pk]; !ok {
+						if response.ChatsModified[chatID] == nil {
+							response.ChatsModified[chatID] = &OrganisationChatChanges{
+								MembersAdded:   make(map[string]*protobuf.OrganisationMember),
+								MembersRemoved: make(map[string]*protobuf.OrganisationMember),
+							}
+						}
+
+						response.ChatsModified[chatID].MembersRemoved[pk] = member
+					}
 				}
 			}
 		}
 	}
 
 	o.config.OrganisationDescription = description
-
-	// store
 
 	return response, nil
 }
@@ -391,20 +422,32 @@ func (o *Organisation) PrivateKey() *ecdsa.PrivateKey {
 // ToBytes returns the organisation in a wrapped & signed protocol message
 func (o *Organisation) ToBytes() ([]byte, error) {
 
-	if len(o.config.MarshaledOrganisationDescription) != 0 {
-		return o.config.MarshaledOrganisationDescription, nil
-	}
-
-	if o.config.PrivateKey == nil {
+	// This should not happen, as we can only serialize on our side if we
+	// created the organisation
+	if o.config.PrivateKey == nil && len(o.config.MarshaledOrganisationDescription) == 0 {
 		return nil, ErrNotAdmin
 	}
 
+	// We are not admin, use the received serialized version
+	if o.config.PrivateKey == nil {
+		return o.config.MarshaledOrganisationDescription, nil
+	}
+
+	// serialize and sign
 	payload, err := proto.Marshal(o.config.OrganisationDescription)
 	if err != nil {
 		return nil, err
 	}
 
 	return protocol.WrapMessageV1(payload, protobuf.ApplicationMetadataMessage_ORGANISATION_DESCRIPTION, o.config.PrivateKey)
+}
+
+func (o *Organisation) Chats() map[string]*protobuf.OrganisationChat {
+	response := make(map[string]*protobuf.OrganisationChat)
+	for k, v := range o.config.OrganisationDescription.Chats {
+		response[k] = v
+	}
+	return response
 }
 
 func (o *Organisation) VerifyGrantSignature(data []byte) (*protobuf.Grant, error) {

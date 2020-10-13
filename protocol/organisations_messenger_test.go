@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"errors"
 	"io/ioutil"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -104,9 +105,11 @@ func (s *MessengerOrganisationsSuite) TestRetrieveOrganisation() {
 		},
 	}
 
-	organisation, err := bob.CreateOrganisation(description)
+	response, err := bob.CreateOrganisation(description)
 	s.Require().NoError(err)
-	s.Require().NotNil(organisation)
+	s.Require().NotNil(response)
+	s.Require().Len(response.Organisations, 1)
+	organisation := response.Organisations[0]
 
 	// Send an organisation message
 	chat := CreateOneToOneChat(common.PubkeyToHex(&alice.identity.PublicKey), &alice.identity.PublicKey, s.m.transport)
@@ -121,7 +124,6 @@ func (s *MessengerOrganisationsSuite) TestRetrieveOrganisation() {
 	_, err = s.m.SendChatMessage(context.Background(), inputMessage)
 	s.NoError(err)
 
-	var response *MessengerResponse
 	// Pull message and make sure org is received
 	err = tt.RetryWithBackOff(func() error {
 		response, err = alice.RetrieveAll()
@@ -141,4 +143,106 @@ func (s *MessengerOrganisationsSuite) TestRetrieveOrganisation() {
 	s.Require().Len(response.Organisations, 1)
 	s.Require().Len(response.Messages, 1)
 	s.Require().Equal(organisation.IDString(), response.Messages[0].OrganisationID)
+}
+
+func (s *MessengerOrganisationsSuite) TestJoinOrganisation() {
+	bob := s.m
+	alice := s.newMessenger(s.shh)
+	// start alice and enable sending push notifications
+	s.Require().NoError(alice.Start())
+
+	description := &protobuf.OrganisationDescription{
+		Permissions: &protobuf.OrganisationPermissions{
+			Access: protobuf.OrganisationPermissions_NO_MEMBERSHIP,
+		},
+		Identity: &protobuf.ChatIdentity{
+			DisplayName: "status",
+			Description: "status organisation description",
+		},
+	}
+
+	// Create an organisation chat
+	response, err := bob.CreateOrganisation(description)
+	s.Require().NoError(err)
+	s.Require().NotNil(response)
+	s.Require().Len(response.Organisations, 1)
+
+	organisation := response.Organisations[0]
+
+	orgChat := &protobuf.OrganisationChat{
+		Permissions: &protobuf.OrganisationPermissions{
+			Access: protobuf.OrganisationPermissions_NO_MEMBERSHIP,
+		},
+		Identity: &protobuf.ChatIdentity{
+			DisplayName: "status-core",
+			Description: "status-core organisation chat",
+		},
+	}
+	response, err = bob.CreateOrganisationChat(organisation.IDString(), orgChat)
+	s.Require().NoError(err)
+	s.Require().NotNil(response)
+	s.Require().Len(response.Organisations, 1)
+	s.Require().Len(response.Chats, 1)
+
+	createdChat := response.Chats[0]
+	s.Require().Equal(organisation.IDString(), createdChat.OrganisationID)
+	s.Require().Equal(orgChat.Identity.DisplayName, createdChat.Name)
+	s.Require().NotEmpty(createdChat.ID)
+	s.Require().Equal(ChatTypeOrganisationChat, createdChat.ChatType)
+	s.Require().True(createdChat.Active)
+	s.Require().NotEmpty(createdChat.Timestamp)
+	s.Require().True(strings.HasPrefix(createdChat.ID, organisation.IDString()))
+
+	// Make sure the changes are reflect in the organisation
+	organisation = response.Organisations[0]
+	chats := organisation.Chats()
+	s.Require().Len(chats, 1)
+
+	// Send an organisation message
+	chat := CreateOneToOneChat(common.PubkeyToHex(&alice.identity.PublicKey), &alice.identity.PublicKey, s.m.transport)
+
+	inputMessage := &common.Message{}
+	inputMessage.ChatId = chat.ID
+	inputMessage.Text = "some text"
+	inputMessage.OrganisationID = organisation.IDString()
+
+	err = s.m.SaveChat(&chat)
+	s.NoError(err)
+	_, err = s.m.SendChatMessage(context.Background(), inputMessage)
+	s.NoError(err)
+
+	// Pull message and make sure org is received
+	err = tt.RetryWithBackOff(func() error {
+		response, err = alice.RetrieveAll()
+		if err != nil {
+			return err
+		}
+		if len(response.Organisations) == 0 {
+			return errors.New("organisation not received")
+		}
+		return nil
+	})
+
+	s.Require().NoError(err)
+	organisations, err := alice.Organisations()
+	s.Require().NoError(err)
+	s.Require().Len(organisations, 1)
+	s.Require().Len(response.Organisations, 1)
+	s.Require().Len(response.Messages, 1)
+	s.Require().Equal(organisation.IDString(), response.Messages[0].OrganisationID)
+
+	// We join the org
+	response, err = alice.JoinOrganisation(organisation.IDString())
+	s.Require().NoError(err)
+	s.Require().NotNil(response)
+	s.Require().Len(response.Chats, 1)
+
+	createdChat = response.Chats[0]
+	s.Require().Equal(organisation.IDString(), createdChat.OrganisationID)
+	s.Require().Equal(orgChat.Identity.DisplayName, createdChat.Name)
+	s.Require().NotEmpty(createdChat.ID)
+	s.Require().Equal(ChatTypeOrganisationChat, createdChat.ChatType)
+	s.Require().True(createdChat.Active)
+	s.Require().NotEmpty(createdChat.Timestamp)
+	s.Require().True(strings.HasPrefix(createdChat.ID, organisation.IDString()))
 }

@@ -22,14 +22,14 @@ func (p *Persistence) SaveOrganisation(organisation *Organisation) error {
 		return err
 	}
 
-	_, err = p.db.Exec(`INSERT INTO organisations_organisations (id, private_key, description) VALUES (?, ?, ?)`, id, crypto.FromECDSA(privateKey), description)
+	_, err = p.db.Exec(`INSERT INTO organisations_organisations (id, private_key, description, joined) VALUES (?, ?, ?,?)`, id, crypto.FromECDSA(privateKey), description, organisation.config.Joined)
 	return err
 }
 
 func (p *Persistence) AllOrganisations() ([]*Organisation, error) {
 	var response []*Organisation
 
-	rows, err := p.db.Query(`SELECT id, private_key, description FROM organisations_organisations`)
+	rows, err := p.db.Query(`SELECT id, private_key, description,joined FROM organisations_organisations`)
 	if err != nil {
 		return nil, err
 	}
@@ -37,12 +37,13 @@ func (p *Persistence) AllOrganisations() ([]*Organisation, error) {
 
 	for rows.Next() {
 		var publicKeyBytes, privateKeyBytes, descriptionBytes []byte
-		err := rows.Scan(&publicKeyBytes, &privateKeyBytes, &descriptionBytes)
+		var joined bool
+		err := rows.Scan(&publicKeyBytes, &privateKeyBytes, &descriptionBytes, &joined)
 		if err != nil {
 			return nil, err
 		}
 
-		org, err := unmarshalOrganisationFromDB(publicKeyBytes, privateKeyBytes, descriptionBytes)
+		org, err := unmarshalOrganisationFromDB(publicKeyBytes, privateKeyBytes, descriptionBytes, joined)
 		if err != nil {
 			return nil, err
 		}
@@ -54,8 +55,9 @@ func (p *Persistence) AllOrganisations() ([]*Organisation, error) {
 
 func (p *Persistence) GetByID(id []byte) (*Organisation, error) {
 	var publicKeyBytes, privateKeyBytes, descriptionBytes []byte
+	var joined bool
 
-	err := p.db.QueryRow(`SELECT id, private_key, description FROM organisations_organisations WHERE id = ?`, id).Scan(&publicKeyBytes, &privateKeyBytes, &descriptionBytes)
+	err := p.db.QueryRow(`SELECT id, private_key, description, joined FROM organisations_organisations WHERE id = ?`, id).Scan(&publicKeyBytes, &privateKeyBytes, &descriptionBytes, &joined)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -63,10 +65,10 @@ func (p *Persistence) GetByID(id []byte) (*Organisation, error) {
 		return nil, err
 	}
 
-	return unmarshalOrganisationFromDB(publicKeyBytes, privateKeyBytes, descriptionBytes)
+	return unmarshalOrganisationFromDB(publicKeyBytes, privateKeyBytes, descriptionBytes, joined)
 }
 
-func unmarshalOrganisationFromDB(publicKeyBytes, privateKeyBytes, descriptionBytes []byte) (*Organisation, error) {
+func unmarshalOrganisationFromDB(publicKeyBytes, privateKeyBytes, descriptionBytes []byte, joined bool) (*Organisation, error) {
 
 	var privateKey *ecdsa.PrivateKey
 	var err error
@@ -101,6 +103,7 @@ func unmarshalOrganisationFromDB(publicKeyBytes, privateKeyBytes, descriptionByt
 		OrganisationDescription:          description,
 		MarshaledOrganisationDescription: descriptionBytes,
 		ID:                               id,
+		Joined:                           joined,
 	}
 	return New(config), nil
 }

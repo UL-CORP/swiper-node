@@ -114,10 +114,12 @@ func (s *OrganisationSuite) TestCreateChat() {
 
 	org.config.PrivateKey = s.identity
 
-	description, err := org.CreateChat(newChatID, &protobuf.OrganisationChat{
+	changes, err := org.CreateChat(newChatID, &protobuf.OrganisationChat{
 		Identity:    identity,
 		Permissions: permissions,
 	})
+
+	description := org.config.OrganisationDescription
 
 	s.Require().NoError(err)
 	s.Require().NotNil(description)
@@ -127,6 +129,9 @@ func (s *OrganisationSuite) TestCreateChat() {
 	s.Require().Equal(permissions, description.Chats[newChatID].Permissions)
 	s.Require().Equal(identity, description.Chats[newChatID].Identity)
 	s.Require().Equal(description.Clock, description.Chats[newChatID].Clock)
+
+	s.Require().NotNil(changes)
+	s.Require().NotNil(changes.ChatsAdded[newChatID])
 }
 
 func (s *OrganisationSuite) TestDeleteChat() {
@@ -499,6 +504,7 @@ func (s *OrganisationSuite) TestHandleOrganisationDescription() {
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
 			org := s.buildOrganisation(signer)
+			org.Join()
 			expectedChanges := tc.changes(org)
 			actualChanges, err := org.HandleOrganisationDescription(tc.signer, tc.description(org))
 			s.Require().Equal(tc.err, err)

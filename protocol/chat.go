@@ -9,6 +9,7 @@ import (
 	"github.com/status-im/status-go/eth-node/crypto"
 	"github.com/status-im/status-go/eth-node/types"
 	"github.com/status-im/status-go/protocol/common"
+	"github.com/status-im/status-go/protocol/organisations"
 	"github.com/status-im/status-go/protocol/protobuf"
 	v1protocol "github.com/status-im/status-go/protocol/v1"
 )
@@ -265,6 +266,26 @@ func CreateOneToOneChat(name string, publicKey *ecdsa.PublicKey, timesource comm
 		Active:    true,
 		ChatType:  ChatTypeOneToOne,
 	}
+}
+
+func CreateOrganisationChat(orgID, chatID string, orgChat *protobuf.OrganisationChat, timesource common.TimeSource) Chat {
+	return Chat{
+		OrganisationID: orgID,
+		Name:           orgChat.Identity.DisplayName,
+		Active:         true,
+		ID:             orgID + chatID,
+		Timestamp:      int64(timesource.GetCurrentTime()),
+		ChatType:       ChatTypeOrganisationChat,
+	}
+}
+func CreateOrganisationChats(org *organisations.Organisation, timesource common.TimeSource) []Chat {
+	var chats []Chat
+	orgID := org.IDString()
+
+	for chatID, chat := range org.Chats() {
+		chats = append(chats, CreateOrganisationChat(orgID, chatID, chat, timesource))
+	}
+	return chats
 }
 
 func CreatePublicChat(name string, timesource common.TimeSource) Chat {

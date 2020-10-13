@@ -321,6 +321,24 @@ func (api *PublicAPI) Organisations(parent context.Context) ([]*organisations.Or
 	return api.service.messenger.Organisations()
 }
 
+func (api *PublicAPI) JoinOrganisation(parent context.Context, organisationID string) (*protocol.MessengerResponse, error) {
+	return api.service.messenger.JoinOrganisation(organisationID)
+}
+
+func (api *PublicAPI) LeaveOrganisation(parent context.Context, organisationID string) (*protocol.MessengerResponse, error) {
+	return api.service.messenger.LeaveOrganisation(organisationID)
+}
+
+func (api *PublicAPI) CreateOrganisation(description *protobuf.OrganisationDescription) (*protocol.MessengerResponse, error) {
+	return api.service.messenger.CreateOrganisation(description)
+
+}
+
+func (api *PublicAPI) CreateOrganisationChat(orgID string, c *protobuf.OrganisationChat) (*protocol.MessengerResponse, error) {
+	return api.service.messenger.CreateOrganisationChat(orgID, c)
+
+}
+
 type ApplicationMessagesResponse struct {
 	Messages []*common.Message `json:"messages"`
 	Cursor   string            `json:"cursor"`
