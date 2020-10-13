@@ -10,6 +10,7 @@ import (
 	"github.com/status-im/status-go/eth-node/types"
 	"github.com/status-im/status-go/protocol/common"
 	"github.com/status-im/status-go/protocol/protobuf"
+	"github.com/status-im/status-go/protocol/v1"
 )
 
 const signatureLength = 65
@@ -387,13 +388,23 @@ func (o *Organisation) PrivateKey() *ecdsa.PrivateKey {
 	return o.config.PrivateKey
 }
 
-func (o *Organisation) DescriptionBytes() ([]byte, error) {
+// ToBytes returns the organisation in a wrapped & signed protocol message
+func (o *Organisation) ToBytes() ([]byte, error) {
 
 	if len(o.config.MarshaledOrganisationDescription) != 0 {
 		return o.config.MarshaledOrganisationDescription, nil
 	}
 
-	return proto.Marshal(o.config.OrganisationDescription)
+	if o.config.PrivateKey == nil {
+		return nil, ErrNotAdmin
+	}
+
+	payload, err := proto.Marshal(o.config.OrganisationDescription)
+	if err != nil {
+		return nil, err
+	}
+
+	return protocol.WrapMessageV1(payload, protobuf.ApplicationMetadataMessage_ORGANISATION_DESCRIPTION, o.config.PrivateKey)
 }
 
 func (o *Organisation) VerifyGrantSignature(data []byte) (*protobuf.Grant, error) {

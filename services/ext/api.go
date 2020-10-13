@@ -317,7 +317,7 @@ func (api *PublicAPI) SetInstallationMetadata(installationID string, data *multi
 	return api.service.messenger.SetInstallationMetadata(installationID, data)
 }
 
-func (api *PublicAPI) Organisations(parent context.Context) []*organisations.Organisation {
+func (api *PublicAPI) Organisations(parent context.Context) ([]*organisations.Organisation, error) {
 	return api.service.messenger.Organisations()
 }
 

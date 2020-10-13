@@ -17,7 +17,7 @@ type Persistence struct {
 func (p *Persistence) SaveOrganisation(organisation *Organisation) error {
 	id := organisation.ID()
 	privateKey := organisation.PrivateKey()
-	description, err := organisation.DescriptionBytes()
+	description, err := organisation.ToBytes()
 	if err != nil {
 		return err
 	}
@@ -38,39 +38,69 @@ func (p *Persistence) AllOrganisations() ([]*Organisation, error) {
 	for rows.Next() {
 		var publicKeyBytes, privateKeyBytes, descriptionBytes []byte
 		err := rows.Scan(&publicKeyBytes, &privateKeyBytes, &descriptionBytes)
-
-		if err != nil {
-			return nil, err
-		}
-		var privateKey *ecdsa.PrivateKey
-
-		if privateKeyBytes != nil {
-			privateKey, err = crypto.ToECDSA(privateKeyBytes)
-			if err != nil {
-				return nil, err
-			}
-		}
-		description := &protobuf.OrganisationDescription{}
-
-		err = proto.Unmarshal(descriptionBytes, description)
 		if err != nil {
 			return nil, err
 		}
 
-		id, err := crypto.DecompressPubkey(publicKeyBytes)
+		org, err := unmarshalOrganisationFromDB(publicKeyBytes, privateKeyBytes, descriptionBytes)
 		if err != nil {
 			return nil, err
 		}
-
-		config := Config{
-			PrivateKey:                       privateKey,
-			OrganisationDescription:          description,
-			MarshaledOrganisationDescription: descriptionBytes,
-			ID:                               id,
-		}
-
-		response = append(response, New(config))
+		response = append(response, org)
 	}
 
 	return response, nil
+}
+
+func (p *Persistence) GetByID(id []byte) (*Organisation, error) {
+	var publicKeyBytes, privateKeyBytes, descriptionBytes []byte
+
+	err := p.db.QueryRow(`SELECT id, private_key, description FROM organisations_organisations WHERE id = ?`, id).Scan(&publicKeyBytes, &privateKeyBytes, &descriptionBytes)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+
+	return unmarshalOrganisationFromDB(publicKeyBytes, privateKeyBytes, descriptionBytes)
+}
+
+func unmarshalOrganisationFromDB(publicKeyBytes, privateKeyBytes, descriptionBytes []byte) (*Organisation, error) {
+
+	var privateKey *ecdsa.PrivateKey
+	var err error
+
+	if privateKeyBytes != nil {
+		privateKey, err = crypto.ToECDSA(privateKeyBytes)
+		if err != nil {
+			return nil, err
+		}
+	}
+	metadata := &protobuf.ApplicationMetadataMessage{}
+
+	err = proto.Unmarshal(descriptionBytes, metadata)
+	if err != nil {
+		return nil, err
+	}
+
+	description := &protobuf.OrganisationDescription{}
+
+	err = proto.Unmarshal(metadata.Payload, description)
+	if err != nil {
+		return nil, err
+	}
+
+	id, err := crypto.DecompressPubkey(publicKeyBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	config := Config{
+		PrivateKey:                       privateKey,
+		OrganisationDescription:          description,
+		MarshaledOrganisationDescription: descriptionBytes,
+		ID:                               id,
+	}
+	return New(config), nil
 }

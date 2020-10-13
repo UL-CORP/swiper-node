@@ -9,3 +9,4 @@ var ErrInvalidOrganisationDescription = errors.New("invalid organisation descrip
 var ErrNotAdmin = errors.New("no admin privileges for this organisation")
 var ErrInvalidGrant = errors.New("invalid grant")
 var ErrNotAuthorized = errors.New("not authorized")
+var ErrInvalidMessage = errors.New("invalid organisation description message")

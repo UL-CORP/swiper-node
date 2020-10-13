@@ -12,6 +12,7 @@ import (
 	"github.com/status-im/status-go/eth-node/types"
 	"github.com/status-im/status-go/protocol/common"
 	"github.com/status-im/status-go/protocol/encryption/multidevice"
+	"github.com/status-im/status-go/protocol/organisations"
 	"github.com/status-im/status-go/protocol/protobuf"
 	v1protocol "github.com/status-im/status-go/protocol/v1"
 )
@@ -23,16 +24,18 @@ const (
 )
 
 type MessageHandler struct {
-	identity    *ecdsa.PrivateKey
-	persistence *sqlitePersistence
-	logger      *zap.Logger
+	identity             *ecdsa.PrivateKey
+	persistence          *sqlitePersistence
+	organisationsManager *organisations.Manager
+	logger               *zap.Logger
 }
 
-func newMessageHandler(identity *ecdsa.PrivateKey, logger *zap.Logger, persistence *sqlitePersistence) *MessageHandler {
+func newMessageHandler(identity *ecdsa.PrivateKey, logger *zap.Logger, persistence *sqlitePersistence, organisationsManager *organisations.Manager) *MessageHandler {
 	return &MessageHandler{
-		identity:    identity,
-		persistence: persistence,
-		logger:      logger}
+		identity:             identity,
+		persistence:          persistence,
+		organisationsManager: organisationsManager,
+		logger:               logger}
 }
 
 // HandleMembershipUpdate updates a Chat instance according to the membership updates.
@@ -324,6 +327,11 @@ func (m *MessageHandler) HandlePairInstallation(state *ReceivedMessageState, mes
 	return nil
 }
 
+// HandleOrganisationDescriptionMessage handles a wrapped organisation description
+func (m *MessageHandler) HandleOrganisationDescriptionMessage(state *ReceivedMessageState, payload []byte) (*organisations.Organisation, error) {
+	return m.organisationsManager.HandleWrappedOrganisationDescriptionMessage(payload)
+}
+
 func (m *MessageHandler) HandleChatMessage(state *ReceivedMessageState) error {
 	logger := m.logger.With(zap.String("site", "handleChatMessage"))
 	if err := ValidateReceivedChatMessage(&state.CurrentMessageState.Message, state.CurrentMessageState.WhisperTimestamp); err != nil {
@@ -395,6 +403,16 @@ func (m *MessageHandler) HandleChatMessage(state *ReceivedMessageState) error {
 		state.AllContacts[contact.ID] = contact
 	}
 
+	if receivedMessage.ContentType == protobuf.ChatMessage_ORGANISATION {
+		m.logger.Debug("Handling organisation content type")
+
+		organisation, err := m.HandleOrganisationDescriptionMessage(state, receivedMessage.GetOrganisation())
+		if err != nil {
+			return err
+		}
+		receivedMessage.OrganisationID = organisation.IDString()
+		state.Response.Organisations = append(state.Response.Organisations, organisation)
+	}
 	// Add to response
 	state.Response.Messages = append(state.Response.Messages, receivedMessage)
 

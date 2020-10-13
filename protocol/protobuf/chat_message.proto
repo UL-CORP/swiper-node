@@ -59,6 +59,7 @@ message ChatMessage {
     StickerMessage sticker = 9;
     ImageMessage image = 10;
     AudioMessage audio = 11;
+    bytes organisation = 12;
   }
 
   enum ContentType {
@@ -72,5 +73,6 @@ message ChatMessage {
     SYSTEM_MESSAGE_CONTENT_PRIVATE_GROUP = 6;
     IMAGE = 7;
     AUDIO = 8;
+    ORGANISATION = 9;
   }
 }
