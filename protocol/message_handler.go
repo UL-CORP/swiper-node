@@ -327,8 +327,36 @@ func (m *MessageHandler) HandlePairInstallation(state *ReceivedMessageState, mes
 	return nil
 }
 
-// HandleOrganisationDescriptionMessage handles a wrapped organisation description
-func (m *MessageHandler) HandleOrganisationDescriptionMessage(state *ReceivedMessageState, payload []byte) (*organisations.Organisation, error) {
+// HandleOrganisationDescription handles an organisation description
+func (m *MessageHandler) HandleOrganisationDescription(state *ReceivedMessageState, signer *ecdsa.PublicKey, description protobuf.OrganisationDescription, rawPayload []byte) error {
+	organisation, err := m.organisationsManager.HandleOrganisationDescriptionMessage(signer, &description, rawPayload)
+	if err != nil {
+		return err
+	}
+	state.Response.Organisations = append(state.Response.Organisations, organisation)
+
+	// Update relevant chats names and add new ones
+	// Currently removal is not supported
+	chats := CreateOrganisationChats(organisation, state.Timesource)
+	for i, chat := range chats {
+
+		oldChat, ok := state.AllChats[chat.ID]
+		if !ok {
+			// Beware, don't use the reference in the range (i.e chat) as it's a shallow copy
+			state.AllChats[chat.ID] = &chats[i]
+			state.ModifiedChats[chat.ID] = true
+			// Update name, currently is the only field is mutable
+		} else if oldChat.Name != chat.Name {
+			state.AllChats[chat.ID].Name = chat.Name
+			state.ModifiedChats[chat.ID] = true
+		}
+	}
+
+	return nil
+}
+
+// HandleWrappedOrganisationDescriptionMessage handles a wrapped organisation description
+func (m *MessageHandler) HandleWrappedOrganisationDescriptionMessage(state *ReceivedMessageState, payload []byte) (*organisations.Organisation, error) {
 	return m.organisationsManager.HandleWrappedOrganisationDescriptionMessage(payload)
 }
 
@@ -406,7 +434,7 @@ func (m *MessageHandler) HandleChatMessage(state *ReceivedMessageState) error {
 	if receivedMessage.ContentType == protobuf.ChatMessage_ORGANISATION {
 		m.logger.Debug("Handling organisation content type")
 
-		organisation, err := m.HandleOrganisationDescriptionMessage(state, receivedMessage.GetOrganisation())
+		organisation, err := m.HandleWrappedOrganisationDescriptionMessage(state, receivedMessage.GetOrganisation())
 		if err != nil {
 			return err
 		}

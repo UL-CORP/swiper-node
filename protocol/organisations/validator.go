@@ -9,19 +9,19 @@ func validateOrganisationChat(desc *protobuf.OrganisationDescription, chat *prot
 		return ErrInvalidOrganisationDescription
 	}
 	if chat.Permissions == nil {
-		return ErrInvalidOrganisationDescription
+		return ErrInvalidOrganisationDescriptionNoChatPermissions
 	}
 	if chat.Permissions.Access == protobuf.OrganisationPermissions_UNKNOWN_ACCESS {
-		return ErrInvalidOrganisationDescription
+		return ErrInvalidOrganisationDescriptionUnknownChatAccess
 	}
 
 	for pk, _ := range chat.Members {
 		if desc.Members == nil {
-			return ErrInvalidOrganisationDescription
+			return ErrInvalidOrganisationDescriptionMemberInChatButNotInOrg
 		}
 		// Check member is in the org as well
 		if _, ok := desc.Members[pk]; !ok {
-			return ErrInvalidOrganisationDescription
+			return ErrInvalidOrganisationDescriptionMemberInChatButNotInOrg
 		}
 	}
 
@@ -33,10 +33,10 @@ func ValidateOrganisationDescription(desc *protobuf.OrganisationDescription) err
 		return ErrInvalidOrganisationDescription
 	}
 	if desc.Permissions == nil {
-		return ErrInvalidOrganisationDescription
+		return ErrInvalidOrganisationDescriptionNoOrgPermissions
 	}
 	if desc.Permissions.Access == protobuf.OrganisationPermissions_UNKNOWN_ACCESS {
-		return ErrInvalidOrganisationDescription
+		return ErrInvalidOrganisationDescriptionUnknownOrgAccess
 	}
 
 	for _, chat := range desc.Chats {

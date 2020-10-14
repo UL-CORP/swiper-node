@@ -131,14 +131,16 @@ func (a *Transport) Filters() []*transport.Filter {
 	return a.filters.Filters()
 }
 
-// DEPRECATED
 func (a *Transport) LoadFilters(filters []*transport.Filter) ([]*transport.Filter, error) {
 	return a.filters.InitWithFilters(filters)
 }
 
-// DEPRECATED
 func (a *Transport) RemoveFilters(filters []*transport.Filter) error {
 	return a.filters.Remove(filters...)
+}
+
+func (a *Transport) RemoveFilterByChatID(chatID string) error {
+	return a.filters.RemoveFilterByChatID(chatID)
 }
 
 func (a *Transport) ResetFilters() error {

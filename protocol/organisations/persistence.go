@@ -26,7 +26,7 @@ func (p *Persistence) SaveOrganisation(organisation *Organisation) error {
 	return err
 }
 
-func (p *Persistence) AllOrganisations() ([]*Organisation, error) {
+func (p *Persistence) queryOrganisations(query string) ([]*Organisation, error) {
 	var response []*Organisation
 
 	rows, err := p.db.Query(`SELECT id, private_key, description,joined FROM organisations_organisations`)
@@ -51,6 +51,22 @@ func (p *Persistence) AllOrganisations() ([]*Organisation, error) {
 	}
 
 	return response, nil
+
+}
+
+func (p *Persistence) AllOrganisations() ([]*Organisation, error) {
+	query := `SELECT id, private_key, description,joined FROM organisations_organisations`
+	return p.queryOrganisations(query)
+}
+
+func (p *Persistence) JoinedOrganisations() ([]*Organisation, error) {
+	query := `SELECT id, private_key, description,joined FROM organisations_organisations WHERE joined`
+	return p.queryOrganisations(query)
+}
+
+func (p *Persistence) CreatedOrganisations() ([]*Organisation, error) {
+	query := `SELECT id, private_key, description,joined FROM organisations_organisations WHERE private_key IS NOT NULL`
+	return p.queryOrganisations(query)
 }
 
 func (p *Persistence) GetByID(id []byte) (*Organisation, error) {

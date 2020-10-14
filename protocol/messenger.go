@@ -49,6 +49,8 @@ var (
 	ErrNotImplemented = errors.New("not implemented")
 )
 
+var organisationAdvertiseIntervalSecond int64 = 60 * 60
+
 // Messenger is a entity managing chats and messages.
 // It acts as a bridge between the application and encryption
 // layers.
@@ -89,17 +91,20 @@ type Messenger struct {
 
 type MessengerResponse struct {
 	Chats               []*Chat                              `json:"chats,omitempty"`
+	RemovedChats        []string                             `json:"removedChats,omitempty"`
 	Messages            []*common.Message                    `json:"messages,omitempty"`
 	Contacts            []*Contact                           `json:"contacts,omitempty"`
 	Installations       []*multidevice.Installation          `json:"installations,omitempty"`
 	EmojiReactions      []*EmojiReaction                     `json:"emojiReactions,omitempty"`
 	Organisations       []*organisations.Organisation        `json:"organisations,omitempty"`
 	OrganisationChanges []*organisations.OrganisationChanges `json:"organisationsChanges,omitempty"`
+	Filters             []*transport.Filter                  `json:"filters,omitempty"`
+	RemovedFilters      []string                             `json:"removedFilters,omitempty"`
 	Invitations         []*GroupChatInvitation               `json:"invitations,omitempty"`
 }
 
 func (m *MessengerResponse) IsEmpty() bool {
-	return len(m.Chats) == 0 && len(m.Messages) == 0 && len(m.Contacts) == 0 && len(m.Installations) == 0 && len(m.Invitations) == 0 && len(m.EmojiReactions) == 0 && len(m.Organisations) == 0
+	return len(m.Chats)+len(m.Messages)+len(m.Contacts)+len(m.Installations)+len(m.Invitations)+len(m.EmojiReactions)+len(m.Organisations)+len(m.Filters)+len(m.RemovedFilters)+len(m.RemovedChats) == 0
 }
 
 type dbConfig struct {
@@ -262,6 +267,7 @@ func NewMessenger(
 		shutdownTasks: []func() error{
 			database.Close,
 			pushNotificationClient.Stop,
+			organisationsManager.Stop,
 			encryptionProtocol.Stop,
 			transp.ResetFilters,
 			transp.Stop,
@@ -311,6 +317,7 @@ func (m *Messenger) Start() error {
 	}
 
 	m.handleEncryptionLayerSubscriptions(subscriptions)
+	m.handleOrganisationsSubscription(m.organisationsManager.Subscribe())
 	m.handleConnectionChange(m.online())
 	m.watchConnectionChange()
 	return nil
@@ -436,6 +443,80 @@ func (m *Messenger) handleEncryptionLayerSubscriptions(subscriptions *encryption
 	}()
 }
 
+func (m *Messenger) publishOrg(org *organisations.Organisation) error {
+	m.logger.Debug("publishing org", zap.String("org-id", org.IDString()), zap.Any("org", org))
+	payload, err := org.MarshaledDescription()
+	if err != nil {
+		return err
+	}
+
+	rawMessage := common.RawMessage{
+		Payload: payload,
+		Sender:  org.PrivateKey(),
+		// we don't want to wrap in an encryption layer message
+		SkipEncryption: true,
+		MessageType:    protobuf.ApplicationMetadataMessage_ORGANISATION_DESCRIPTION,
+	}
+	_, err = m.processor.SendPublic(context.Background(), org.IDString(), rawMessage)
+	return err
+}
+
+// handleOrganisationsSubscription handles events from organisations
+func (m *Messenger) handleOrganisationsSubscription(c chan []*organisations.Organisation) {
+
+	var lastPublished int64
+	// We check every 5 minutes if we need to publish
+	ticker := time.NewTicker(5 * time.Minute)
+
+	go func() {
+		for {
+			select {
+			case orgs, more := <-c:
+				if !more {
+					return
+				}
+				for _, org := range orgs {
+					err := m.publishOrg(org)
+					if err != nil {
+						m.logger.Warn("failed to publish org", zap.Error(err))
+					}
+
+					m.logger.Debug("published orgs")
+				}
+			case <-ticker.C:
+				// If we are not online, we don't even try
+				if !m.online() {
+					continue
+				}
+
+				// If not enough time has passed since last advertisement, we skip this
+				if time.Now().Unix()-lastPublished < organisationAdvertiseIntervalSecond {
+					continue
+				}
+
+				orgs, err := m.organisationsManager.Created()
+				if err != nil {
+					m.logger.Warn("failed to retrieve orgs", zap.Error(err))
+				}
+
+				for _, org := range orgs {
+					err := m.publishOrg(org)
+					if err != nil {
+						m.logger.Warn("failed to publish org", zap.Error(err))
+					}
+				}
+
+				// set lastPublished
+				lastPublished = time.Now().Unix()
+
+			case <-m.quit:
+				return
+
+			}
+		}
+	}()
+}
+
 // watchConnectionChange checks the connection status and call handleConnectionChange when this changes
 func (m *Messenger) watchConnectionChange() {
 	m.logger.Debug("watching connection changes")
@@ -491,6 +572,15 @@ func (m *Messenger) Init() error {
 		publicKeys    []*ecdsa.PublicKey
 	)
 
+	organisations, err := m.organisationsManager.Joined()
+	if err != nil {
+		return err
+	}
+	for _, org := range organisations {
+		// the org advertise on the public topic derived by the pk
+		publicChatIDs = append(publicChatIDs, org.IDString())
+	}
+
 	// Get chat IDs and public keys from the existing chats.
 	// TODO: Get only active chats by the query.
 	chats, err := m.persistence.Chats()
@@ -509,6 +599,8 @@ func (m *Messenger) Init() error {
 		}
 		switch chat.ChatType {
 		case ChatTypePublic, ChatTypeProfile:
+			publicChatIDs = append(publicChatIDs, chat.ID)
+		case ChatTypeOrganisationChat:
 			publicChatIDs = append(publicChatIDs, chat.ID)
 		case ChatTypeOneToOne:
 			pk, err := chat.PublicKey()
@@ -1454,13 +1546,45 @@ func (m *Messenger) JoinOrganisation(organisationID string) (*MessengerResponse,
 	for _, chat := range chats {
 		m.allChats[chat.ID] = &chat
 		response.Chats = append(response.Chats, &chat)
-
 	}
+
+	// Load transport filters
+	filters, err := m.transport.InitFilters([]string{org.IDString()}, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	response.Filters = filters
+	response.Organisations = []*organisations.Organisation{org}
+
 	return response, nil
 }
 
 func (m *Messenger) LeaveOrganisation(organisationID string) (*MessengerResponse, error) {
-	return nil, nil
+	response := &MessengerResponse{}
+
+	org, err := m.organisationsManager.LeaveOrganisation(organisationID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Make chat inactive
+	for chatID, _ := range org.Chats() {
+		err := m.DeleteChat(chatID)
+		if err != nil {
+			return nil, err
+		}
+		response.RemovedChats = append(response.RemovedChats, chatID)
+		response.RemovedFilters = append(response.RemovedFilters, chatID)
+	}
+
+	err = m.transport.RemoveFilterByChatID(organisationID)
+	if err != nil {
+		return nil, err
+	}
+	response.RemovedFilters = append(response.RemovedFilters, organisationID)
+	response.Organisations = []*organisations.Organisation{org}
+	return response, nil
 }
 
 func (m *Messenger) CreateOrganisationChat(orgID string, c *protobuf.OrganisationChat) (*MessengerResponse, error) {
@@ -2513,6 +2637,13 @@ func (m *Messenger) handleRetrievedMessages(chatWithMessages map[transport.Filte
 							continue
 						}
 
+					case protobuf.OrganisationDescription:
+						logger.Debug("Handling OrganisationDescription")
+						err = m.handler.HandleOrganisationDescription(messageState, publicKey, msg.ParsedMessage.Interface().(protobuf.OrganisationDescription), msg.DecryptedPayload)
+						if err != nil {
+							logger.Warn("failed to handle OrganisationDescription", zap.Error(err))
+							continue
+						}
 					default:
 						// Check if is an encrypted PushNotificationRegistration
 						if msg.Type == protobuf.ApplicationMetadataMessage_PUSH_NOTIFICATION_REGISTRATION {

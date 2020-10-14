@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/ecdsa"
 	"encoding/json"
+	"sync"
 
 	"github.com/golang/protobuf/proto"
 
@@ -26,6 +27,7 @@ type Config struct {
 
 type Organisation struct {
 	config *Config
+	mutex  sync.Mutex
 }
 
 func New(config Config) *Organisation {
@@ -80,6 +82,9 @@ func emptyOrganisationChanges() *OrganisationChanges {
 }
 
 func (o *Organisation) CreateChat(chatID string, chat *protobuf.OrganisationChat) (*OrganisationChanges, error) {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+
 	if o.config.PrivateKey == nil {
 		return nil, ErrNotAdmin
 	}
@@ -107,6 +112,9 @@ func (o *Organisation) CreateChat(chatID string, chat *protobuf.OrganisationChat
 }
 
 func (o *Organisation) DeleteChat(chatID string) (*protobuf.OrganisationDescription, error) {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+
 	if o.config.PrivateKey == nil {
 		return nil, ErrNotAdmin
 	}
@@ -123,6 +131,9 @@ func (o *Organisation) DeleteChat(chatID string) (*protobuf.OrganisationDescript
 }
 
 func (o *Organisation) InviteUserToOrg(pk *ecdsa.PublicKey) (*protobuf.OrganisationInvitation, error) {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+
 	if o.config.PrivateKey == nil {
 		return nil, ErrNotAdmin
 	}
@@ -143,6 +154,9 @@ func (o *Organisation) InviteUserToOrg(pk *ecdsa.PublicKey) (*protobuf.Organisat
 }
 
 func (o *Organisation) InviteUserToChat(pk *ecdsa.PublicKey, chatID string) (*protobuf.OrganisationInvitation, error) {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+
 	if o.config.PrivateKey == nil {
 		return nil, ErrNotAdmin
 	}
@@ -173,14 +187,24 @@ func (o *Organisation) InviteUserToChat(pk *ecdsa.PublicKey, chatID string) (*pr
 	return response, nil
 }
 
-func (o *Organisation) HasMember(pk *ecdsa.PublicKey) bool {
+func (o *Organisation) hasMember(pk *ecdsa.PublicKey) bool {
+
 	key := common.PubkeyToHex(pk)
 	_, ok := o.config.OrganisationDescription.Members[key]
 	return ok
 }
 
+func (o *Organisation) HasMember(pk *ecdsa.PublicKey) bool {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+	return o.hasMember(pk)
+}
+
 func (o *Organisation) IsMemberInChat(pk *ecdsa.PublicKey, chatID string) bool {
-	if !o.HasMember(pk) {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+
+	if !o.hasMember(pk) {
 		return false
 	}
 
@@ -195,10 +219,13 @@ func (o *Organisation) IsMemberInChat(pk *ecdsa.PublicKey, chatID string) bool {
 }
 
 func (o *Organisation) RemoveUserFromChat(pk *ecdsa.PublicKey, chatID string) (*protobuf.OrganisationDescription, error) {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+
 	if o.config.PrivateKey == nil {
 		return nil, ErrNotAdmin
 	}
-	if !o.HasMember(pk) {
+	if !o.hasMember(pk) {
 		return o.config.OrganisationDescription, nil
 	}
 
@@ -214,10 +241,13 @@ func (o *Organisation) RemoveUserFromChat(pk *ecdsa.PublicKey, chatID string) (*
 }
 
 func (o *Organisation) RemoveUserFromOrg(pk *ecdsa.PublicKey) (*protobuf.OrganisationDescription, error) {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+
 	if o.config.PrivateKey == nil {
 		return nil, ErrNotAdmin
 	}
-	if !o.HasMember(pk) {
+	if !o.hasMember(pk) {
 		return o.config.OrganisationDescription, nil
 	}
 	key := common.PubkeyToHex(pk)
@@ -234,6 +264,7 @@ func (o *Organisation) RemoveUserFromOrg(pk *ecdsa.PublicKey) (*protobuf.Organis
 }
 
 func (o *Organisation) AcceptRequestToJoin(pk *ecdsa.PublicKey) (*protobuf.OrganisationRequestJoinResponse, error) {
+
 	return nil, nil
 }
 
@@ -249,7 +280,14 @@ func (o *Organisation) Leave() {
 	o.config.Joined = false
 }
 
-func (o *Organisation) HandleOrganisationDescription(signer *ecdsa.PublicKey, description *protobuf.OrganisationDescription) (*OrganisationChanges, error) {
+func (o *Organisation) Joined() bool {
+	return o.config.Joined
+}
+
+func (o *Organisation) HandleOrganisationDescription(signer *ecdsa.PublicKey, description *protobuf.OrganisationDescription, rawMessage []byte) (*OrganisationChanges, error) {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+
 	if !common.IsPubKeyEqual(o.config.ID, signer) {
 		return nil, ErrNotAuthorized
 	}
@@ -344,12 +382,16 @@ func (o *Organisation) HandleOrganisationDescription(signer *ecdsa.PublicKey, de
 	}
 
 	o.config.OrganisationDescription = description
+	o.config.MarshaledOrganisationDescription = rawMessage
 
 	return response, nil
 }
 
 // HandleRequestJoin handles a request, checks that the right permissions are applied and returns an OrganisationRequestJoinResponse
 func (o *Organisation) HandleRequestJoin(signer *ecdsa.PublicKey, request *protobuf.OrganisationRequestJoin) error {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+
 	// If we are not admin, fuggetaboutit
 	if !o.IsAdmin() {
 		return ErrNotAdmin
@@ -378,6 +420,9 @@ func (o *Organisation) IsAdmin() bool {
 }
 
 func (o *Organisation) handleRequestJoinWithChatID(signer *ecdsa.PublicKey, request *protobuf.OrganisationRequestJoin) error {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+
 	var chat *protobuf.OrganisationChat
 	chat, ok := o.config.OrganisationDescription.Chats[request.ChatId]
 
@@ -398,6 +443,8 @@ func (o *Organisation) handleRequestJoinWithChatID(signer *ecdsa.PublicKey, requ
 }
 
 func (o *Organisation) handleRequestJoinWithoutChatID(signer *ecdsa.PublicKey, request *protobuf.OrganisationRequestJoin) error {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
 
 	// If they want access to the org only, check that the org is ON_REQUEST
 	if o.config.OrganisationDescription.Permissions.Access != protobuf.OrganisationPermissions_ON_REQUEST {
@@ -419,8 +466,20 @@ func (o *Organisation) PrivateKey() *ecdsa.PrivateKey {
 	return o.config.PrivateKey
 }
 
+func (o *Organisation) marshaledDescription() ([]byte, error) {
+	return proto.Marshal(o.config.OrganisationDescription)
+}
+
+func (o *Organisation) MarshaledDescription() ([]byte, error) {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+	return o.marshaledDescription()
+}
+
 // ToBytes returns the organisation in a wrapped & signed protocol message
 func (o *Organisation) ToBytes() ([]byte, error) {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
 
 	// This should not happen, as we can only serialize on our side if we
 	// created the organisation
@@ -434,7 +493,7 @@ func (o *Organisation) ToBytes() ([]byte, error) {
 	}
 
 	// serialize and sign
-	payload, err := proto.Marshal(o.config.OrganisationDescription)
+	payload, err := o.marshaledDescription()
 	if err != nil {
 		return nil, err
 	}
@@ -443,6 +502,9 @@ func (o *Organisation) ToBytes() ([]byte, error) {
 }
 
 func (o *Organisation) Chats() map[string]*protobuf.OrganisationChat {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+
 	response := make(map[string]*protobuf.OrganisationChat)
 	for k, v := range o.config.OrganisationDescription.Chats {
 		response[k] = v

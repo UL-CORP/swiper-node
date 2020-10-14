@@ -235,8 +235,11 @@ func (s *MessengerOrganisationsSuite) TestJoinOrganisation() {
 	response, err = alice.JoinOrganisation(organisation.IDString())
 	s.Require().NoError(err)
 	s.Require().NotNil(response)
+	s.Require().Len(response.Organisations, 1)
+	s.Require().True(response.Organisations[0].Joined())
 	s.Require().Len(response.Chats, 1)
 
+	// The chat should be created
 	createdChat = response.Chats[0]
 	s.Require().Equal(organisation.IDString(), createdChat.OrganisationID)
 	s.Require().Equal(orgChat.Identity.DisplayName, createdChat.Name)
@@ -245,4 +248,57 @@ func (s *MessengerOrganisationsSuite) TestJoinOrganisation() {
 	s.Require().True(createdChat.Active)
 	s.Require().NotEmpty(createdChat.Timestamp)
 	s.Require().True(strings.HasPrefix(createdChat.ID, organisation.IDString()))
+
+	// Create another org chat
+	orgChat = &protobuf.OrganisationChat{
+		Permissions: &protobuf.OrganisationPermissions{
+			Access: protobuf.OrganisationPermissions_NO_MEMBERSHIP,
+		},
+		Identity: &protobuf.ChatIdentity{
+			DisplayName: "status-core-ui",
+			Description: "status-core-ui organisation chat",
+		},
+	}
+	response, err = bob.CreateOrganisationChat(organisation.IDString(), orgChat)
+	s.Require().NoError(err)
+	s.Require().NotNil(response)
+	s.Require().Len(response.Organisations, 1)
+	s.Require().Len(response.Chats, 1)
+
+	// Pull message, this time it should be received as advertised automatically
+	err = tt.RetryWithBackOff(func() error {
+		response, err = alice.RetrieveAll()
+		if err != nil {
+			return err
+		}
+		if len(response.Organisations) == 0 {
+			return errors.New("organisation not received")
+		}
+		return nil
+	})
+
+	s.Require().NoError(err)
+	organisations, err = alice.Organisations()
+	s.Require().NoError(err)
+	s.Require().Len(organisations, 1)
+	s.Require().Len(response.Organisations, 1)
+	s.Require().Len(response.Chats, 1)
+
+	// The chat should be created
+	createdChat = response.Chats[0]
+	s.Require().Equal(organisation.IDString(), createdChat.OrganisationID)
+	s.Require().Equal(orgChat.Identity.DisplayName, createdChat.Name)
+	s.Require().NotEmpty(createdChat.ID)
+	s.Require().Equal(ChatTypeOrganisationChat, createdChat.ChatType)
+	s.Require().True(createdChat.Active)
+	s.Require().NotEmpty(createdChat.Timestamp)
+	s.Require().True(strings.HasPrefix(createdChat.ID, organisation.IDString()))
+
+	// We leave the org
+	response, err = alice.LeaveOrganisation(organisation.IDString())
+	s.Require().NoError(err)
+	s.Require().NotNil(response)
+	s.Require().Len(response.Organisations, 1)
+	s.Require().False(response.Organisations[0].Joined())
+	s.Require().Len(response.RemovedChats, 2)
 }

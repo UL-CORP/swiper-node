@@ -217,6 +217,19 @@ func (s *FiltersManager) Remove(filters ...*Filter) error {
 	return nil
 }
 
+// Remove remove all the filters associated with a chat/identity
+func (s *FiltersManager) RemoveFilterByChatID(chatID string) error {
+	s.mutex.Lock()
+	filter, ok := s.filters[chatID]
+	s.mutex.Unlock()
+
+	if !ok {
+		return nil
+	}
+
+	return s.Remove(filter)
+}
+
 // LoadPartitioned creates a filter for a partitioned topic.
 func (s *FiltersManager) LoadPartitioned(publicKey *ecdsa.PublicKey, identity *ecdsa.PrivateKey, listen bool) (*Filter, error) {
 	return s.loadPartitioned(publicKey, identity, listen)
