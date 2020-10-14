@@ -79,8 +79,15 @@ func (s *OrganisationSuite) TestInviteUserToOrg() {
 	s.Require().True(org.HasMember(&newMember.PublicKey))
 
 	// Check member has been added to response
-	s.Require().NotNil(response.Organisation)
-	_, ok := response.Organisation.Members[common.PubkeyToHex(&newMember.PublicKey)]
+	s.Require().NotNil(response.OrganisationDescription)
+
+	metadata := &protobuf.ApplicationMetadataMessage{}
+	description := &protobuf.OrganisationDescription{}
+
+	s.Require().NoError(proto.Unmarshal(response.OrganisationDescription, metadata))
+	s.Require().NoError(proto.Unmarshal(metadata.Payload, description))
+
+	_, ok := description.Members[common.PubkeyToHex(&newMember.PublicKey)]
 	s.Require().True(ok)
 
 	// Check grant validates
@@ -173,11 +180,18 @@ func (s *OrganisationSuite) TestInviteUserToChat() {
 	s.Require().True(org.IsMemberInChat(&newMember.PublicKey, testChatID1))
 
 	// Check member has been added to response
-	s.Require().NotNil(response.Organisation)
-	_, ok := response.Organisation.Members[common.PubkeyToHex(&newMember.PublicKey)]
+	s.Require().NotNil(response.OrganisationDescription)
+
+	metadata := &protobuf.ApplicationMetadataMessage{}
+	description := &protobuf.OrganisationDescription{}
+
+	s.Require().NoError(proto.Unmarshal(response.OrganisationDescription, metadata))
+	s.Require().NoError(proto.Unmarshal(metadata.Payload, description))
+
+	_, ok := description.Members[common.PubkeyToHex(&newMember.PublicKey)]
 	s.Require().True(ok)
 
-	_, ok = response.Organisation.Chats[testChatID1].Members[common.PubkeyToHex(&newMember.PublicKey)]
+	_, ok = description.Chats[testChatID1].Members[common.PubkeyToHex(&newMember.PublicKey)]
 	s.Require().True(ok)
 
 	s.Require().Equal(testChatID1, response.ChatId)
@@ -506,7 +520,7 @@ func (s *OrganisationSuite) TestHandleOrganisationDescription() {
 			org := s.buildOrganisation(signer)
 			org.Join()
 			expectedChanges := tc.changes(org)
-			actualChanges, err := org.HandleOrganisationDescription(tc.signer, tc.description(org))
+			actualChanges, err := org.HandleOrganisationDescription(tc.signer, tc.description(org), []byte{0x01})
 			s.Require().Equal(tc.err, err)
 			s.Require().Equal(expectedChanges, actualChanges)
 		})
@@ -532,27 +546,27 @@ func (s *OrganisationSuite) TestValidateOrganisationDescription() {
 		{
 			name:        "empty org permissions",
 			description: s.emptyPermissionsOrganisationDescription(),
-			err:         ErrInvalidOrganisationDescription,
+			err:         ErrInvalidOrganisationDescriptionNoOrgPermissions,
 		},
 		{
 			name:        "empty chat permissions",
 			description: s.emptyChatPermissionsOrganisationDescription(),
-			err:         ErrInvalidOrganisationDescription,
+			err:         ErrInvalidOrganisationDescriptionNoChatPermissions,
 		},
 		{
 			name:        "unknown org permissions",
 			description: s.unknownOrgPermissionsOrganisationDescription(),
-			err:         ErrInvalidOrganisationDescription,
+			err:         ErrInvalidOrganisationDescriptionUnknownOrgAccess,
 		},
 		{
 			name:        "unknown chat permissions",
 			description: s.unknownChatPermissionsOrganisationDescription(),
-			err:         ErrInvalidOrganisationDescription,
+			err:         ErrInvalidOrganisationDescriptionUnknownChatAccess,
 		},
 		{
 			name:        "member in chat but not in org",
 			description: s.memberInChatNotInOrgOrganisationDescription(),
-			err:         ErrInvalidOrganisationDescription,
+			err:         ErrInvalidOrganisationDescriptionMemberInChatButNotInOrg,
 		},
 	}
 

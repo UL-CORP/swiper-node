@@ -461,8 +461,31 @@ func (m *Messenger) publishOrg(org *organisations.Organisation) error {
 	return err
 }
 
+func (m *Messenger) publishOrgInvitation(org *organisations.Organisation, invitation *protobuf.OrganisationInvitation) error {
+	m.logger.Debug("publishing org invitation", zap.String("org-id", org.IDString()), zap.Any("org", org))
+	pk, err := crypto.DecompressPubkey(invitation.PublicKey)
+	if err != nil {
+		return err
+	}
+
+	payload, err := proto.Marshal(invitation)
+	if err != nil {
+		return err
+	}
+
+	rawMessage := common.RawMessage{
+		Payload: payload,
+		Sender:  org.PrivateKey(),
+		// we don't want to wrap in an encryption layer message
+		SkipEncryption: true,
+		MessageType:    protobuf.ApplicationMetadataMessage_ORGANISATION_INVITATION,
+	}
+	_, err = m.processor.SendPrivate(context.Background(), pk, rawMessage)
+	return err
+}
+
 // handleOrganisationsSubscription handles events from organisations
-func (m *Messenger) handleOrganisationsSubscription(c chan []*organisations.Organisation) {
+func (m *Messenger) handleOrganisationsSubscription(c chan *organisations.Subscription) {
 
 	var lastPublished int64
 	// We check every 5 minutes if we need to publish
@@ -471,18 +494,25 @@ func (m *Messenger) handleOrganisationsSubscription(c chan []*organisations.Orga
 	go func() {
 		for {
 			select {
-			case orgs, more := <-c:
+			case sub, more := <-c:
 				if !more {
 					return
 				}
-				for _, org := range orgs {
-					err := m.publishOrg(org)
+				if sub.Organisation != nil {
+					err := m.publishOrg(sub.Organisation)
 					if err != nil {
 						m.logger.Warn("failed to publish org", zap.Error(err))
 					}
-
-					m.logger.Debug("published orgs")
 				}
+
+				if sub.Invitation != nil {
+					err := m.publishOrgInvitation(sub.Organisation, sub.Invitation)
+					if err != nil {
+						m.logger.Warn("failed to publish org invitation", zap.Error(err))
+					}
+				}
+
+				m.logger.Debug("published org")
 			case <-ticker.C:
 				// If we are not online, we don't even try
 				if !m.online() {
@@ -833,7 +863,7 @@ func (m *Messenger) CreateGroupChatWithMembers(ctx context.Context, name string,
 	if err != nil {
 		return nil, err
 	}
-	recipients, err := stringSliceToPublicKeys(group.Members(), true)
+	recipients, err := stringSliceToPublicKeys(group.Members())
 	if err != nil {
 		return nil, err
 	}
@@ -904,7 +934,7 @@ func (m *Messenger) RemoveMemberFromGroupChat(ctx context.Context, chatID string
 
 	// We save the initial recipients as we want to send updates to also
 	// the members kicked out
-	oldRecipients, err := stringSliceToPublicKeys(group.Members(), true)
+	oldRecipients, err := stringSliceToPublicKeys(group.Members())
 	if err != nil {
 		return nil, err
 	}
@@ -1007,7 +1037,7 @@ func (m *Messenger) AddMembersToGroupChat(ctx context.Context, chatID string, me
 		return nil, err
 	}
 
-	recipients, err := stringSliceToPublicKeys(group.Members(), true)
+	recipients, err := stringSliceToPublicKeys(group.Members())
 	if err != nil {
 		return nil, err
 	}
@@ -1072,7 +1102,7 @@ func (m *Messenger) ChangeGroupChatName(ctx context.Context, chatID string, name
 		return nil, err
 	}
 
-	recipients, err := stringSliceToPublicKeys(group.Members(), true)
+	recipients, err := stringSliceToPublicKeys(group.Members())
 	if err != nil {
 		return nil, err
 	}
@@ -1283,7 +1313,7 @@ func (m *Messenger) AddAdminsToGroupChat(ctx context.Context, chatID string, mem
 		return nil, err
 	}
 
-	recipients, err := stringSliceToPublicKeys(group.Members(), true)
+	recipients, err := stringSliceToPublicKeys(group.Members())
 	if err != nil {
 		return nil, err
 	}
@@ -1351,7 +1381,7 @@ func (m *Messenger) ConfirmJoiningGroup(ctx context.Context, chatID string) (*Me
 		return nil, err
 	}
 
-	recipients, err := stringSliceToPublicKeys(group.Members(), true)
+	recipients, err := stringSliceToPublicKeys(group.Members())
 	if err != nil {
 		return nil, err
 	}
@@ -1419,7 +1449,7 @@ func (m *Messenger) LeaveGroupChat(ctx context.Context, chatID string, remove bo
 		return nil, err
 	}
 
-	recipients, err := stringSliceToPublicKeys(group.Members(), true)
+	recipients, err := stringSliceToPublicKeys(group.Members())
 	if err != nil {
 		return nil, err
 	}
@@ -1606,6 +1636,22 @@ func (m *Messenger) CreateOrganisationChat(orgID string, c *protobuf.Organisatio
 
 func (m *Messenger) CreateOrganisation(description *protobuf.OrganisationDescription) (*MessengerResponse, error) {
 	org, err := m.organisationsManager.CreateOrganisation(description)
+	if err != nil {
+		return nil, err
+	}
+
+	return &MessengerResponse{
+		Organisations: []*organisations.Organisation{org},
+	}, nil
+}
+
+func (m *Messenger) InviteUserToOrganisation(orgID, pkString string) (*MessengerResponse, error) {
+	publicKey, err := common.HexToPubkey(pkString)
+	if err != nil {
+		return nil, err
+	}
+
+	org, err := m.organisationsManager.InviteUserToOrganisation(orgID, publicKey)
 	if err != nil {
 		return nil, err
 	}
@@ -2640,6 +2686,14 @@ func (m *Messenger) handleRetrievedMessages(chatWithMessages map[transport.Filte
 					case protobuf.OrganisationDescription:
 						logger.Debug("Handling OrganisationDescription")
 						err = m.handler.HandleOrganisationDescription(messageState, publicKey, msg.ParsedMessage.Interface().(protobuf.OrganisationDescription), msg.DecryptedPayload)
+						if err != nil {
+							logger.Warn("failed to handle OrganisationDescription", zap.Error(err))
+							continue
+						}
+					case protobuf.OrganisationInvitation:
+						logger.Debug("Handling OrganisationInvitation")
+						invitation := msg.ParsedMessage.Interface().(protobuf.OrganisationInvitation)
+						err = m.handler.HandleOrganisationInvitation(messageState, publicKey, invitation, invitation.OrganisationDescription)
 						if err != nil {
 							logger.Warn("failed to handle OrganisationDescription", zap.Error(err))
 							continue

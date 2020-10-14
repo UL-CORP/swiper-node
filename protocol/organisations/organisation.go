@@ -139,16 +139,27 @@ func (o *Organisation) InviteUserToOrg(pk *ecdsa.PublicKey) (*protobuf.Organisat
 	}
 	memberKey := common.PubkeyToHex(pk)
 
+	if o.config.OrganisationDescription.Members == nil {
+		o.config.OrganisationDescription.Members = make(map[string]*protobuf.OrganisationMember)
+	}
+
 	if _, ok := o.config.OrganisationDescription.Members[memberKey]; !ok {
 		o.config.OrganisationDescription.Members[memberKey] = &protobuf.OrganisationMember{}
 	}
 
-	response := &protobuf.OrganisationInvitation{Organisation: o.config.OrganisationDescription}
+	response := &protobuf.OrganisationInvitation{}
+	marshaledOrganisation, err := o.toBytes()
+	if err != nil {
+		return nil, err
+	}
+	response.OrganisationDescription = marshaledOrganisation
+
 	grant, err := o.buildGrant(pk, "")
 	if err != nil {
 		return nil, err
 	}
 	response.Grant = grant
+	response.PublicKey = crypto.CompressPubkey(pk)
 
 	return response, nil
 }
@@ -176,7 +187,13 @@ func (o *Organisation) InviteUserToChat(pk *ecdsa.PublicKey, chatID string) (*pr
 	}
 	chat.Members[memberKey] = &protobuf.OrganisationMember{}
 
-	response := &protobuf.OrganisationInvitation{Organisation: o.config.OrganisationDescription}
+	response := &protobuf.OrganisationInvitation{}
+	marshaledOrganisation, err := o.toBytes()
+	if err != nil {
+		return nil, err
+	}
+	response.OrganisationDescription = marshaledOrganisation
+
 	grant, err := o.buildGrant(pk, chatID)
 	if err != nil {
 		return nil, err
@@ -420,8 +437,6 @@ func (o *Organisation) IsAdmin() bool {
 }
 
 func (o *Organisation) handleRequestJoinWithChatID(signer *ecdsa.PublicKey, request *protobuf.OrganisationRequestJoin) error {
-	o.mutex.Lock()
-	defer o.mutex.Unlock()
 
 	var chat *protobuf.OrganisationChat
 	chat, ok := o.config.OrganisationDescription.Chats[request.ChatId]
@@ -443,8 +458,6 @@ func (o *Organisation) handleRequestJoinWithChatID(signer *ecdsa.PublicKey, requ
 }
 
 func (o *Organisation) handleRequestJoinWithoutChatID(signer *ecdsa.PublicKey, request *protobuf.OrganisationRequestJoin) error {
-	o.mutex.Lock()
-	defer o.mutex.Unlock()
 
 	// If they want access to the org only, check that the org is ON_REQUEST
 	if o.config.OrganisationDescription.Permissions.Access != protobuf.OrganisationPermissions_ON_REQUEST {
@@ -476,10 +489,7 @@ func (o *Organisation) MarshaledDescription() ([]byte, error) {
 	return o.marshaledDescription()
 }
 
-// ToBytes returns the organisation in a wrapped & signed protocol message
-func (o *Organisation) ToBytes() ([]byte, error) {
-	o.mutex.Lock()
-	defer o.mutex.Unlock()
+func (o *Organisation) toBytes() ([]byte, error) {
 
 	// This should not happen, as we can only serialize on our side if we
 	// created the organisation
@@ -499,6 +509,13 @@ func (o *Organisation) ToBytes() ([]byte, error) {
 	}
 
 	return protocol.WrapMessageV1(payload, protobuf.ApplicationMetadataMessage_ORGANISATION_DESCRIPTION, o.config.PrivateKey)
+}
+
+// ToBytes returns the organisation in a wrapped & signed protocol message
+func (o *Organisation) ToBytes() ([]byte, error) {
+	o.mutex.Lock()
+	defer o.mutex.Unlock()
+	return o.toBytes()
 }
 
 func (o *Organisation) Chats() map[string]*protobuf.OrganisationChat {

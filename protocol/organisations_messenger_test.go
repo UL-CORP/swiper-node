@@ -27,8 +27,8 @@ func TestMessengerOrganisationsSuite(t *testing.T) {
 
 type MessengerOrganisationsSuite struct {
 	suite.Suite
-	m          *Messenger        // main instance of Messenger
-	privateKey *ecdsa.PrivateKey // private key for the main instance of Messenger
+	bob   *Messenger
+	alice *Messenger
 	// If one wants to send messages between different instances of Messenger,
 	// a single Waku service should be shared.
 	shh    types.Waku
@@ -44,13 +44,15 @@ func (s *MessengerOrganisationsSuite) SetupTest() {
 	s.shh = gethbridge.NewGethWakuWrapper(shh)
 	s.Require().NoError(shh.Start(nil))
 
-	s.m = s.newMessenger(s.shh)
-	s.privateKey = s.m.identity
-	s.Require().NoError(s.m.Start())
+	s.bob = s.newMessenger(s.shh)
+	s.alice = s.newMessenger(s.shh)
+	s.Require().NoError(s.bob.Start())
+	s.Require().NoError(s.alice.Start())
 }
 
 func (s *MessengerOrganisationsSuite) TearDownTest() {
-	s.Require().NoError(s.m.Shutdown())
+	s.Require().NoError(s.bob.Shutdown())
+	s.Require().NoError(s.alice.Shutdown())
 	_ = s.logger.Sync()
 }
 
@@ -90,10 +92,7 @@ func (s *MessengerOrganisationsSuite) newMessenger(shh types.Waku) *Messenger {
 }
 
 func (s *MessengerOrganisationsSuite) TestRetrieveOrganisation() {
-	bob := s.m
 	alice := s.newMessenger(s.shh)
-	// start alice and enable sending push notifications
-	s.Require().NoError(alice.Start())
 
 	description := &protobuf.OrganisationDescription{
 		Permissions: &protobuf.OrganisationPermissions{
@@ -105,23 +104,23 @@ func (s *MessengerOrganisationsSuite) TestRetrieveOrganisation() {
 		},
 	}
 
-	response, err := bob.CreateOrganisation(description)
+	response, err := s.bob.CreateOrganisation(description)
 	s.Require().NoError(err)
 	s.Require().NotNil(response)
 	s.Require().Len(response.Organisations, 1)
 	organisation := response.Organisations[0]
 
 	// Send an organisation message
-	chat := CreateOneToOneChat(common.PubkeyToHex(&alice.identity.PublicKey), &alice.identity.PublicKey, s.m.transport)
+	chat := CreateOneToOneChat(common.PubkeyToHex(&alice.identity.PublicKey), &alice.identity.PublicKey, s.alice.transport)
 
 	inputMessage := &common.Message{}
 	inputMessage.ChatId = chat.ID
 	inputMessage.Text = "some text"
 	inputMessage.OrganisationID = organisation.IDString()
 
-	err = s.m.SaveChat(&chat)
+	err = s.bob.SaveChat(&chat)
 	s.NoError(err)
-	_, err = s.m.SendChatMessage(context.Background(), inputMessage)
+	_, err = s.bob.SendChatMessage(context.Background(), inputMessage)
 	s.NoError(err)
 
 	// Pull message and make sure org is received
@@ -146,10 +145,8 @@ func (s *MessengerOrganisationsSuite) TestRetrieveOrganisation() {
 }
 
 func (s *MessengerOrganisationsSuite) TestJoinOrganisation() {
-	bob := s.m
-	alice := s.newMessenger(s.shh)
 	// start alice and enable sending push notifications
-	s.Require().NoError(alice.Start())
+	s.Require().NoError(s.alice.Start())
 
 	description := &protobuf.OrganisationDescription{
 		Permissions: &protobuf.OrganisationPermissions{
@@ -162,7 +159,7 @@ func (s *MessengerOrganisationsSuite) TestJoinOrganisation() {
 	}
 
 	// Create an organisation chat
-	response, err := bob.CreateOrganisation(description)
+	response, err := s.bob.CreateOrganisation(description)
 	s.Require().NoError(err)
 	s.Require().NotNil(response)
 	s.Require().Len(response.Organisations, 1)
@@ -178,7 +175,7 @@ func (s *MessengerOrganisationsSuite) TestJoinOrganisation() {
 			Description: "status-core organisation chat",
 		},
 	}
-	response, err = bob.CreateOrganisationChat(organisation.IDString(), orgChat)
+	response, err = s.bob.CreateOrganisationChat(organisation.IDString(), orgChat)
 	s.Require().NoError(err)
 	s.Require().NotNil(response)
 	s.Require().Len(response.Organisations, 1)
@@ -199,21 +196,21 @@ func (s *MessengerOrganisationsSuite) TestJoinOrganisation() {
 	s.Require().Len(chats, 1)
 
 	// Send an organisation message
-	chat := CreateOneToOneChat(common.PubkeyToHex(&alice.identity.PublicKey), &alice.identity.PublicKey, s.m.transport)
+	chat := CreateOneToOneChat(common.PubkeyToHex(&s.alice.identity.PublicKey), &s.alice.identity.PublicKey, s.bob.transport)
 
 	inputMessage := &common.Message{}
 	inputMessage.ChatId = chat.ID
 	inputMessage.Text = "some text"
 	inputMessage.OrganisationID = organisation.IDString()
 
-	err = s.m.SaveChat(&chat)
+	err = s.bob.SaveChat(&chat)
 	s.NoError(err)
-	_, err = s.m.SendChatMessage(context.Background(), inputMessage)
+	_, err = s.bob.SendChatMessage(context.Background(), inputMessage)
 	s.NoError(err)
 
 	// Pull message and make sure org is received
 	err = tt.RetryWithBackOff(func() error {
-		response, err = alice.RetrieveAll()
+		response, err = s.alice.RetrieveAll()
 		if err != nil {
 			return err
 		}
@@ -224,7 +221,7 @@ func (s *MessengerOrganisationsSuite) TestJoinOrganisation() {
 	})
 
 	s.Require().NoError(err)
-	organisations, err := alice.Organisations()
+	organisations, err := s.alice.Organisations()
 	s.Require().NoError(err)
 	s.Require().Len(organisations, 1)
 	s.Require().Len(response.Organisations, 1)
@@ -232,7 +229,7 @@ func (s *MessengerOrganisationsSuite) TestJoinOrganisation() {
 	s.Require().Equal(organisation.IDString(), response.Messages[0].OrganisationID)
 
 	// We join the org
-	response, err = alice.JoinOrganisation(organisation.IDString())
+	response, err = s.alice.JoinOrganisation(organisation.IDString())
 	s.Require().NoError(err)
 	s.Require().NotNil(response)
 	s.Require().Len(response.Organisations, 1)
@@ -259,7 +256,7 @@ func (s *MessengerOrganisationsSuite) TestJoinOrganisation() {
 			Description: "status-core-ui organisation chat",
 		},
 	}
-	response, err = bob.CreateOrganisationChat(organisation.IDString(), orgChat)
+	response, err = s.bob.CreateOrganisationChat(organisation.IDString(), orgChat)
 	s.Require().NoError(err)
 	s.Require().NotNil(response)
 	s.Require().Len(response.Organisations, 1)
@@ -267,7 +264,7 @@ func (s *MessengerOrganisationsSuite) TestJoinOrganisation() {
 
 	// Pull message, this time it should be received as advertised automatically
 	err = tt.RetryWithBackOff(func() error {
-		response, err = alice.RetrieveAll()
+		response, err = s.alice.RetrieveAll()
 		if err != nil {
 			return err
 		}
@@ -278,7 +275,7 @@ func (s *MessengerOrganisationsSuite) TestJoinOrganisation() {
 	})
 
 	s.Require().NoError(err)
-	organisations, err = alice.Organisations()
+	organisations, err = s.alice.Organisations()
 	s.Require().NoError(err)
 	s.Require().Len(organisations, 1)
 	s.Require().Len(response.Organisations, 1)
@@ -295,10 +292,59 @@ func (s *MessengerOrganisationsSuite) TestJoinOrganisation() {
 	s.Require().True(strings.HasPrefix(createdChat.ID, organisation.IDString()))
 
 	// We leave the org
-	response, err = alice.LeaveOrganisation(organisation.IDString())
+	response, err = s.alice.LeaveOrganisation(organisation.IDString())
 	s.Require().NoError(err)
 	s.Require().NotNil(response)
 	s.Require().Len(response.Organisations, 1)
 	s.Require().False(response.Organisations[0].Joined())
 	s.Require().Len(response.RemovedChats, 2)
+}
+
+func (s *MessengerOrganisationsSuite) TestInviteUserToOrganisation() {
+	description := &protobuf.OrganisationDescription{
+		Permissions: &protobuf.OrganisationPermissions{
+			Access: protobuf.OrganisationPermissions_NO_MEMBERSHIP,
+		},
+		Identity: &protobuf.ChatIdentity{
+			DisplayName: "status",
+			Description: "status organisation description",
+		},
+	}
+
+	// Create an organisation chat
+	response, err := s.bob.CreateOrganisation(description)
+	s.Require().NoError(err)
+	s.Require().NotNil(response)
+	s.Require().Len(response.Organisations, 1)
+
+	organisation := response.Organisations[0]
+
+	response, err = s.bob.InviteUserToOrganisation(organisation.IDString(), common.PubkeyToHex(&s.alice.identity.PublicKey))
+	s.Require().NoError(err)
+	s.Require().NotNil(response)
+	s.Require().Len(response.Organisations, 1)
+
+	organisation = response.Organisations[0]
+	s.Require().True(organisation.HasMember(&s.alice.identity.PublicKey))
+
+	// Pull message and make sure org is received
+	err = tt.RetryWithBackOff(func() error {
+		response, err = s.alice.RetrieveAll()
+		if err != nil {
+			return err
+		}
+		if len(response.Organisations) == 0 {
+			return errors.New("organisation not received")
+		}
+		return nil
+	})
+
+	s.Require().NoError(err)
+	organisations, err := s.alice.Organisations()
+	s.Require().NoError(err)
+	s.Require().Len(organisations, 1)
+	s.Require().Len(response.Organisations, 1)
+
+	organisation = response.Organisations[0]
+	s.Require().True(organisation.HasMember(&s.alice.identity.PublicKey))
 }

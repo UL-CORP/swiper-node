@@ -335,6 +335,11 @@ func (m *MessageHandler) HandleOrganisationDescription(state *ReceivedMessageSta
 	}
 	state.Response.Organisations = append(state.Response.Organisations, organisation)
 
+	// If we haven't joined the org, nothing to do
+	if !organisation.Joined() {
+		return nil
+	}
+
 	// Update relevant chats names and add new ones
 	// Currently removal is not supported
 	chats := CreateOrganisationChats(organisation, state.Timesource)
@@ -351,6 +356,29 @@ func (m *MessageHandler) HandleOrganisationDescription(state *ReceivedMessageSta
 			state.ModifiedChats[chat.ID] = true
 		}
 	}
+
+	return nil
+}
+
+// HandleOrganisationInvitation handles an organisation invitation
+func (m *MessageHandler) HandleOrganisationInvitation(state *ReceivedMessageState, signer *ecdsa.PublicKey, invitation protobuf.OrganisationInvitation, rawPayload []byte) error {
+	if invitation.PublicKey == nil {
+		return errors.New("invalid pubkey")
+	}
+	pk, err := crypto.DecompressPubkey(invitation.PublicKey)
+	if err != nil {
+		return err
+	}
+
+	if !common.IsPubKeyEqual(pk, &m.identity.PublicKey) {
+		return errors.New("invitation not for us")
+	}
+
+	org, err := m.organisationsManager.HandleOrganisationInvitation(signer, &invitation, rawPayload)
+	if err != nil {
+		return err
+	}
+	state.Response.Organisations = append(state.Response.Organisations, org)
 
 	return nil
 }

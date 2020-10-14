@@ -44,9 +44,10 @@ message OrganisationChat {
 }
 
 message OrganisationInvitation {
-  OrganisationDescription organisation = 1;
+  bytes organisation_description = 1;
   bytes grant = 2;
   string chat_id = 3;
+  bytes public_key = 4;
 }
 
 message OrganisationRequestJoin {

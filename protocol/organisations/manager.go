@@ -16,7 +16,7 @@ import (
 
 type Manager struct {
 	persistence   *Persistence
-	subscriptions []chan []*Organisation
+	subscriptions []chan *Subscription
 	logger        *zap.Logger
 }
 
@@ -34,8 +34,13 @@ func NewManager(db *sql.DB, logger *zap.Logger) (*Manager, error) {
 	}, nil
 }
 
-func (m *Manager) Subscribe() chan []*Organisation {
-	subscription := make(chan []*Organisation, 100)
+type Subscription struct {
+	Organisation *Organisation
+	Invitation   *protobuf.OrganisationInvitation
+}
+
+func (m *Manager) Subscribe() chan *Subscription {
+	subscription := make(chan *Subscription, 100)
 	m.subscriptions = append(m.subscriptions, subscription)
 	return subscription
 }
@@ -47,19 +52,15 @@ func (m *Manager) Stop() error {
 	return nil
 }
 
-func (m *Manager) publish() error {
-	organisations, err := m.persistence.CreatedOrganisations()
-	if err != nil {
-		return err
-	}
+func (m *Manager) publish(subscription *Subscription) {
 	for _, s := range m.subscriptions {
 		select {
-		case s <- organisations:
+		case s <- subscription:
 		default:
 			m.logger.Warn("subscription channel full, dropping message")
 		}
 	}
-	return nil
+	return
 }
 
 func (m *Manager) All() ([]*Organisation, error) {
@@ -95,16 +96,12 @@ func (m *Manager) CreateOrganisation(description *protobuf.OrganisationDescripti
 		OrganisationDescription: description,
 	}
 	org := New(config)
-	m.logger.Debug("SAVING", zap.Any("ORG", org))
 	err = m.persistence.SaveOrganisation(org)
 	if err != nil {
 		return nil, err
 	}
 
-	err = m.publish()
-	if err != nil {
-		return nil, err
-	}
+	m.publish(&Subscription{Organisation: org})
 
 	return org, nil
 }
@@ -130,10 +127,7 @@ func (m *Manager) CreateChat(idString string, chat *protobuf.OrganisationChat) (
 	}
 
 	// Advertise changes
-	err = m.publish()
-	if err != nil {
-		return nil, nil, err
-	}
+	m.publish(&Subscription{Organisation: org})
 
 	return org, changes, nil
 }
@@ -156,22 +150,28 @@ func (m *Manager) HandleOrganisationDescriptionMessage(signer *ecdsa.PublicKey, 
 		org = New(config)
 	}
 
-	m.logger.Debug("Handling organisation description message", zap.Any("DESC", description))
-	m.logger.Debug("Handling organisation description message", zap.Any("DESC2", description.Clock))
 	_, err = org.HandleOrganisationDescription(signer, description, payload)
 	if err != nil {
 		return nil, err
 	}
 
-	m.logger.Debug("Handled organisation description message", zap.Any("DESC", org))
-	m.logger.Debug("SAVING", zap.Any("ORG", org))
-	m.logger.Debug("PAYLOAD", zap.Any("payload", payload))
-	m.logger.Debug("SAVING2", zap.Any("CONFIG", org.config))
-
 	err = m.persistence.SaveOrganisation(org)
 	if err != nil {
 		return nil, err
 	}
+
+	return org, nil
+}
+
+func (m *Manager) HandleOrganisationInvitation(signer *ecdsa.PublicKey, invitation *protobuf.OrganisationInvitation, payload []byte) (*Organisation, error) {
+	m.logger.Debug("Handling wrapped organisation description message")
+
+	org, err := m.HandleWrappedOrganisationDescriptionMessage(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	// Save grant
 
 	return org, nil
 }
@@ -233,6 +233,25 @@ func (m *Manager) LeaveOrganisation(idString string) (*Organisation, error) {
 	if err != nil {
 		return nil, err
 	}
+	return org, nil
+}
+
+func (m *Manager) InviteUserToOrganisation(idString string, pk *ecdsa.PublicKey) (*Organisation, error) {
+	org, err := m.GetByIDString(idString)
+	if err != nil {
+		return nil, err
+	}
+	if org == nil {
+		return nil, ErrOrgNotFound
+	}
+
+	invitation, err := org.InviteUserToOrg(pk)
+	if err != nil {
+		return nil, err
+	}
+
+	m.publish(&Subscription{Organisation: org, Invitation: invitation})
+
 	return org, nil
 }
 

@@ -336,7 +336,10 @@ func (api *PublicAPI) CreateOrganisation(description *protobuf.OrganisationDescr
 
 func (api *PublicAPI) CreateOrganisationChat(orgID string, c *protobuf.OrganisationChat) (*protocol.MessengerResponse, error) {
 	return api.service.messenger.CreateOrganisationChat(orgID, c)
+}
 
+func (api *PublicAPI) InviteUserToOrganisation(orgID, userPublicKey string) (*protocol.MessengerResponse, error) {
+	return api.service.messenger.InviteUserToOrganisation(orgID, userPublicKey)
 }
 
 type ApplicationMessagesResponse struct {

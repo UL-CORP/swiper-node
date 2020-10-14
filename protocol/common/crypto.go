@@ -74,3 +74,11 @@ func IsPubKeyEqual(a, b *ecdsa.PublicKey) bool {
 func PubkeyToHex(key *ecdsa.PublicKey) string {
 	return types.EncodeHex(crypto.FromECDSAPub(key))
 }
+
+func HexToPubkey(pk string) (*ecdsa.PublicKey, error) {
+	bytes, err := types.DecodeHex(pk)
+	if err != nil {
+		return nil, err
+	}
+	return crypto.UnmarshalPubkey(bytes)
+}
