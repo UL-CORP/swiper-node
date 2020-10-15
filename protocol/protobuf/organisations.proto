@@ -37,10 +37,9 @@ message OrganisationDescription {
 }
 
 message OrganisationChat {
-  uint64 clock = 2;
-  map<string,OrganisationMember> members = 3;
-  OrganisationPermissions permissions = 4;
-  ChatIdentity identity = 5;
+  map<string,OrganisationMember> members = 1;
+  OrganisationPermissions permissions = 2;
+  ChatIdentity identity = 3;
 }
 
 message OrganisationInvitation {

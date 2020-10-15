@@ -100,11 +100,10 @@ func (o *Organisation) CreateChat(chatID string, chat *protobuf.OrganisationChat
 	if _, ok := o.config.OrganisationDescription.Chats[chatID]; ok {
 		return nil, ErrChatAlreadyExists
 	}
-	clock := o.nextClock()
-	chat.Clock = clock
 
 	o.config.OrganisationDescription.Chats[chatID] = chat
-	o.config.OrganisationDescription.Clock = clock
+
+	o.increaseClock()
 
 	changes := emptyOrganisationChanges()
 	changes.ChatsAdded[chatID] = chat
@@ -123,9 +122,8 @@ func (o *Organisation) DeleteChat(chatID string) (*protobuf.OrganisationDescript
 		o.config.OrganisationDescription.Chats = make(map[string]*protobuf.OrganisationChat)
 	}
 	delete(o.config.OrganisationDescription.Chats, chatID)
-	clock := o.nextClock()
 
-	o.config.OrganisationDescription.Clock = clock
+	o.increaseClock()
 
 	return o.config.OrganisationDescription, nil
 }
@@ -146,6 +144,8 @@ func (o *Organisation) InviteUserToOrg(pk *ecdsa.PublicKey) (*protobuf.Organisat
 	if _, ok := o.config.OrganisationDescription.Members[memberKey]; !ok {
 		o.config.OrganisationDescription.Members[memberKey] = &protobuf.OrganisationMember{}
 	}
+
+	o.increaseClock()
 
 	response := &protobuf.OrganisationInvitation{}
 	marshaledOrganisation, err := o.toBytes()
@@ -186,6 +186,8 @@ func (o *Organisation) InviteUserToChat(pk *ecdsa.PublicKey, chatID string) (*pr
 		chat.Members = make(map[string]*protobuf.OrganisationMember)
 	}
 	chat.Members[memberKey] = &protobuf.OrganisationMember{}
+
+	o.increaseClock()
 
 	response := &protobuf.OrganisationInvitation{}
 	marshaledOrganisation, err := o.toBytes()
@@ -563,6 +565,95 @@ func (o *Organisation) VerifyGrantSignature(data []byte) (*protobuf.Grant, error
 	return grant, nil
 }
 
+func (o *Organisation) CanPost(pk *ecdsa.PublicKey, chatID string, grantBytes []byte) (bool, error) {
+	if o.config.OrganisationDescription.Chats == nil {
+		return false, nil
+	}
+
+	chat, ok := o.config.OrganisationDescription.Chats[chatID]
+	if !ok {
+		return false, nil
+	}
+
+	// creator can always post
+	if common.IsPubKeyEqual(pk, o.config.ID) {
+		return true, nil
+	}
+
+	// If both the chat & the org have no permissions, the user is allowed to post
+	if o.config.OrganisationDescription.Permissions.Access == protobuf.OrganisationPermissions_NO_MEMBERSHIP && chat.Permissions.Access == protobuf.OrganisationPermissions_NO_MEMBERSHIP {
+		return true, nil
+	}
+
+	if chat.Permissions.Access != protobuf.OrganisationPermissions_NO_MEMBERSHIP {
+		if chat.Members == nil {
+			return false, nil
+		}
+
+		_, ok := chat.Members[common.PubkeyToHex(pk)]
+		// If member, we stop here
+		if ok {
+			return true, nil
+		}
+
+		// If not a member, and not grant, we return
+		if !ok && grantBytes == nil {
+			return false, nil
+		}
+
+		// Otherwise we verify the grant
+		return o.canPostWithGrant(pk, chatID, grantBytes)
+	}
+
+	// Chat has no membership, check org permissions
+	if o.config.OrganisationDescription.Members == nil {
+		return false, nil
+	}
+
+	// If member, they can post
+	_, ok = chat.Members[common.PubkeyToHex(pk)]
+	if ok {
+		return true, nil
+	}
+
+	// Not a member and no grant, can't post
+	if !ok && grantBytes == nil {
+		return false, nil
+	}
+
+	return o.canPostWithGrant(pk, chatID, grantBytes)
+}
+
+func (o *Organisation) canPostWithGrant(pk *ecdsa.PublicKey, chatID string, grantBytes []byte) (bool, error) {
+	grant, err := o.VerifyGrantSignature(grantBytes)
+	if err != nil {
+		return false, err
+	}
+	// If the clock is lower or equal is invalid
+	if grant.Clock <= o.config.OrganisationDescription.Clock {
+		return false, nil
+	}
+
+	if grant.MemberId == nil {
+		return false, nil
+	}
+
+	grantPk, err := crypto.DecompressPubkey(grant.MemberId)
+	if err != nil {
+		return false, nil
+	}
+
+	if !common.IsPubKeyEqual(grantPk, pk) {
+		return false, nil
+	}
+
+	if chatID != grant.ChatId {
+		return false, nil
+	}
+
+	return true, nil
+}
+
 func (o *Organisation) buildGrant(key *ecdsa.PublicKey, chatID string) ([]byte, error) {
 	grant := &protobuf.Grant{
 		OrganisationId: o.ID(),
@@ -583,6 +674,10 @@ func (o *Organisation) buildGrant(key *ecdsa.PublicKey, chatID string) ([]byte, 
 	}
 
 	return append(signature, marshaledGrant...), nil
+}
+
+func (o *Organisation) increaseClock() {
+	o.config.OrganisationDescription.Clock = o.nextClock()
 }
 
 func (o *Organisation) nextClock() uint64 {

@@ -132,10 +132,9 @@ func (s *OrganisationSuite) TestCreateChat() {
 	s.Require().NotNil(description)
 
 	s.Require().NotNil(description.Chats[newChatID])
-	s.Require().NotEmpty(description.Chats[newChatID].Clock)
+	s.Require().NotEmpty(description.Clock)
 	s.Require().Equal(permissions, description.Chats[newChatID].Permissions)
 	s.Require().Equal(identity, description.Chats[newChatID].Identity)
-	s.Require().Equal(description.Clock, description.Chats[newChatID].Clock)
 
 	s.Require().NotNil(changes)
 	s.Require().NotNil(changes.ChatsAdded[newChatID])
@@ -426,6 +425,114 @@ func (s *OrganisationSuite) TestHandleRequestJoin() {
 	}
 }
 
+func (s *OrganisationSuite) TestCanPost() {
+	validGrant := 1
+	invalidGrant := 2
+
+	notMember := &s.member3.PublicKey
+	member := &s.member1.PublicKey
+
+	// MEMBERSHIP-NO-MEMBERSHIP-Member-> User can post
+	// MEMBERSHIP-NO-MEMEBRESHIP->NON member -> User can't post
+	// MEMBERSHIP-NO-MEMBERSHIP-Grant -> user can post
+	// MEMBERSHIP-NO-MEMBERSHIP-old-grant -> user can't post
+
+	testCases := []struct {
+		name    string
+		config  Config
+		member  *ecdsa.PublicKey
+		err     error
+		grant   int
+		canPost bool
+	}{
+		{
+			name:    "no-membership org with no-membeship chat",
+			config:  s.configNoMembershipOrgNoMembershipChat(),
+			member:  notMember,
+			canPost: true,
+		},
+		{
+			name:    "no-membership org with invitation only chat-not-a-member",
+			config:  s.configNoMembershipOrgInvitationOnlyChat(),
+			member:  notMember,
+			canPost: false,
+		},
+		{
+			name:    "no-membership org with invitation only chat member",
+			config:  s.configNoMembershipOrgInvitationOnlyChat(),
+			member:  member,
+			canPost: true,
+		},
+		{
+			name:    "no-membership org with invitation only chat-not-a-member valid grant",
+			config:  s.configNoMembershipOrgInvitationOnlyChat(),
+			member:  notMember,
+			canPost: true,
+			grant:   validGrant,
+		},
+		{
+			name:    "no-membership org with invitation only chat-not-a-member invalid grant",
+			config:  s.configNoMembershipOrgInvitationOnlyChat(),
+			member:  notMember,
+			canPost: false,
+			grant:   invalidGrant,
+		},
+		{
+			name:    "membership org with no-membership chat-not-a-member",
+			config:  s.configOnRequestOrgNoMembershipChat(),
+			member:  notMember,
+			canPost: false,
+		},
+		{
+			name:    "membership org with no-membership chat",
+			config:  s.configOnRequestOrgNoMembershipChat(),
+			member:  member,
+			canPost: true,
+		},
+		{
+			name:    "membership org with no-membership chat  not-a-member valid grant",
+			config:  s.configOnRequestOrgNoMembershipChat(),
+			member:  notMember,
+			canPost: true,
+			grant:   validGrant,
+		},
+		{
+			name:    "membership org with no-membership chat not-a-member invalid grant",
+			config:  s.configOnRequestOrgNoMembershipChat(),
+			member:  notMember,
+			canPost: false,
+			grant:   invalidGrant,
+		},
+		{
+			name:    "monsier creator can always post of course",
+			config:  s.configOnRequestOrgNoMembershipChat(),
+			member:  &s.identity.PublicKey,
+			canPost: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			var grant []byte
+			var err error
+			org := New(tc.config)
+			if tc.grant == validGrant {
+				grant, err = org.buildGrant(tc.member, testChatID1)
+				// We lower the clock of the description to simulate
+				// a valid use case
+				org.config.OrganisationDescription.Clock--
+				s.Require().NoError(err)
+			} else if tc.grant == invalidGrant {
+				grant, err = org.buildGrant(&s.member2.PublicKey, testChatID1)
+				s.Require().NoError(err)
+			}
+			canPost, err := org.CanPost(tc.member, testChatID1, grant)
+			s.Require().Equal(tc.err, err)
+			s.Require().Equal(tc.canPost, canPost)
+		})
+	}
+}
+
 func (s *OrganisationSuite) TestHandleOrganisationDescription() {
 	key, err := crypto.GenerateKey()
 	s.Require().NoError(err)
@@ -587,11 +694,15 @@ func (s *OrganisationSuite) emptyOrganisationDescription() *protobuf.Organisatio
 
 func (s *OrganisationSuite) emptyOrganisationDescriptionWithChat() *protobuf.OrganisationDescription {
 	desc := &protobuf.OrganisationDescription{
+		Members:     make(map[string]*protobuf.OrganisationMember),
+		Clock:       1,
 		Chats:       make(map[string]*protobuf.OrganisationChat),
 		Permissions: &protobuf.OrganisationPermissions{},
 	}
 
-	desc.Chats[testChatID1] = &protobuf.OrganisationChat{Permissions: &protobuf.OrganisationPermissions{}}
+	desc.Chats[testChatID1] = &protobuf.OrganisationChat{Permissions: &protobuf.OrganisationPermissions{}, Members: make(map[string]*protobuf.OrganisationMember)}
+	desc.Members[common.PubkeyToHex(&s.member1.PublicKey)] = &protobuf.OrganisationMember{}
+	desc.Chats[testChatID1].Members[common.PubkeyToHex(&s.member1.PublicKey)] = &protobuf.OrganisationMember{}
 
 	return desc
 
@@ -677,6 +788,17 @@ func (s *OrganisationSuite) configOnRequestOrgInvitationOnlyChat() Config {
 	description := s.emptyOrganisationDescriptionWithChat()
 	description.Permissions.Access = protobuf.OrganisationPermissions_ON_REQUEST
 	description.Chats[testChatID1].Permissions.Access = protobuf.OrganisationPermissions_INVITATION_ONLY
+	return Config{
+		ID:                      &s.identity.PublicKey,
+		OrganisationDescription: description,
+		PrivateKey:              s.identity,
+	}
+}
+
+func (s *OrganisationSuite) configOnRequestOrgNoMembershipChat() Config {
+	description := s.emptyOrganisationDescriptionWithChat()
+	description.Permissions.Access = protobuf.OrganisationPermissions_ON_REQUEST
+	description.Chats[testChatID1].Permissions.Access = protobuf.OrganisationPermissions_NO_MEMBERSHIP
 	return Config{
 		ID:                      &s.identity.PublicKey,
 		OrganisationDescription: description,
