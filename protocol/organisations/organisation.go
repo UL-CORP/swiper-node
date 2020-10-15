@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/golang/protobuf/proto"
+	"go.uber.org/zap"
 
 	"github.com/status-im/status-go/eth-node/crypto"
 	"github.com/status-im/status-go/eth-node/types"
@@ -23,6 +24,7 @@ type Config struct {
 	MarshaledOrganisationDescription []byte
 	ID                               *ecdsa.PublicKey
 	Joined                           bool
+	Logger                           *zap.Logger
 }
 
 type Organisation struct {
@@ -30,20 +32,30 @@ type Organisation struct {
 	mutex  sync.Mutex
 }
 
-func New(config Config) *Organisation {
+func New(config Config) (*Organisation, error) {
+	if config.Logger == nil {
+		logger, err := zap.NewDevelopment()
+		if err != nil {
+			return nil, err
+		}
+		config.Logger = logger
+	}
+
 	organisation := &Organisation{config: &config}
 	organisation.initialize()
-	return organisation
+	return organisation, nil
 }
 
 func (o *Organisation) MarshalJSON() ([]byte, error) {
 	item := struct {
 		ID                                string `json:"id"`
 		*protobuf.OrganisationDescription `json:"description"`
+		Admin                             bool `json:admin"`
 		Joined                            bool `json:"joined"`
 	}{
 		ID:                      o.IDString(),
 		OrganisationDescription: o.config.OrganisationDescription,
+		Admin:                   o.config.PrivateKey != nil,
 		Joined:                  o.config.Joined,
 	}
 	return json.Marshal(item)
@@ -567,11 +579,13 @@ func (o *Organisation) VerifyGrantSignature(data []byte) (*protobuf.Grant, error
 
 func (o *Organisation) CanPost(pk *ecdsa.PublicKey, chatID string, grantBytes []byte) (bool, error) {
 	if o.config.OrganisationDescription.Chats == nil {
+		o.config.Logger.Debug("canPost, no-chats")
 		return false, nil
 	}
 
 	chat, ok := o.config.OrganisationDescription.Chats[chatID]
 	if !ok {
+		o.config.Logger.Debug("canPost, no chat with id", zap.String("chat-id", chatID))
 		return false, nil
 	}
 
@@ -587,6 +601,7 @@ func (o *Organisation) CanPost(pk *ecdsa.PublicKey, chatID string, grantBytes []
 
 	if chat.Permissions.Access != protobuf.OrganisationPermissions_NO_MEMBERSHIP {
 		if chat.Members == nil {
+			o.config.Logger.Debug("canPost, no members in chat", zap.String("chat-id", chatID))
 			return false, nil
 		}
 
@@ -598,6 +613,7 @@ func (o *Organisation) CanPost(pk *ecdsa.PublicKey, chatID string, grantBytes []
 
 		// If not a member, and not grant, we return
 		if !ok && grantBytes == nil {
+			o.config.Logger.Debug("canPost, not a member in chat", zap.String("chat-id", chatID))
 			return false, nil
 		}
 
@@ -607,17 +623,19 @@ func (o *Organisation) CanPost(pk *ecdsa.PublicKey, chatID string, grantBytes []
 
 	// Chat has no membership, check org permissions
 	if o.config.OrganisationDescription.Members == nil {
+		o.config.Logger.Debug("canPost, no members in org", zap.String("chat-id", chatID))
 		return false, nil
 	}
 
 	// If member, they can post
-	_, ok = chat.Members[common.PubkeyToHex(pk)]
+	_, ok = o.config.OrganisationDescription.Members[common.PubkeyToHex(pk)]
 	if ok {
 		return true, nil
 	}
 
 	// Not a member and no grant, can't post
 	if !ok && grantBytes == nil {
+		o.config.Logger.Debug("canPost, not a member in org", zap.String("chat-id", chatID), zap.String("pubkey", common.PubkeyToHex(pk)))
 		return false, nil
 	}
 

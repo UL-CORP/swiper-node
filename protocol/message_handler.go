@@ -726,6 +726,26 @@ func (m *MessageHandler) matchChatEntity(chatEntity common.ChatEntity, chats map
 			chat = &newChat
 		}
 		return chat, nil
+	case chatEntity.GetMessageType() == protobuf.MessageType_ORGANISATION_CHAT:
+		chatID := chatEntity.GetChatId()
+		chat := chats[chatID]
+		if chat == nil {
+			return nil, errors.New("received organisation chat chatEntity for non-existing chat")
+		}
+
+		if chat.OrganisationID == "" || chat.ChatType != ChatTypeOrganisationChat {
+			return nil, errors.New("not an organisation chat")
+		}
+
+		canPost, err := m.organisationsManager.CanPost(chatEntity.GetSigPubKey(), chat.OrganisationID, chat.OrganisationChatID(), chatEntity.GetGrant())
+		if err != nil {
+			return nil, err
+		}
+		if !canPost {
+			return nil, errors.New("user can't post")
+		}
+
+		return chat, nil
 	case chatEntity.GetMessageType() == protobuf.MessageType_PRIVATE_GROUP:
 		// In the case of a group chatEntity, ChatID is the same for all messages belonging to a group.
 		// It needs to be verified if the signature public key belongs to the chat.

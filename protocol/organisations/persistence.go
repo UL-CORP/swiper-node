@@ -5,13 +5,15 @@ import (
 	"database/sql"
 
 	"github.com/golang/protobuf/proto"
+	"go.uber.org/zap"
 
 	"github.com/status-im/status-go/eth-node/crypto"
 	"github.com/status-im/status-go/protocol/protobuf"
 )
 
 type Persistence struct {
-	db *sql.DB
+	db     *sql.DB
+	logger *zap.Logger
 }
 
 func (p *Persistence) SaveOrganisation(organisation *Organisation) error {
@@ -43,7 +45,7 @@ func (p *Persistence) queryOrganisations(query string) ([]*Organisation, error) 
 			return nil, err
 		}
 
-		org, err := unmarshalOrganisationFromDB(publicKeyBytes, privateKeyBytes, descriptionBytes, joined)
+		org, err := unmarshalOrganisationFromDB(publicKeyBytes, privateKeyBytes, descriptionBytes, joined, p.logger)
 		if err != nil {
 			return nil, err
 		}
@@ -81,10 +83,10 @@ func (p *Persistence) GetByID(id []byte) (*Organisation, error) {
 		return nil, err
 	}
 
-	return unmarshalOrganisationFromDB(publicKeyBytes, privateKeyBytes, descriptionBytes, joined)
+	return unmarshalOrganisationFromDB(publicKeyBytes, privateKeyBytes, descriptionBytes, joined, p.logger)
 }
 
-func unmarshalOrganisationFromDB(publicKeyBytes, privateKeyBytes, descriptionBytes []byte, joined bool) (*Organisation, error) {
+func unmarshalOrganisationFromDB(publicKeyBytes, privateKeyBytes, descriptionBytes []byte, joined bool, logger *zap.Logger) (*Organisation, error) {
 
 	var privateKey *ecdsa.PrivateKey
 	var err error
@@ -118,8 +120,9 @@ func unmarshalOrganisationFromDB(publicKeyBytes, privateKeyBytes, descriptionByt
 		PrivateKey:                       privateKey,
 		OrganisationDescription:          description,
 		MarshaledOrganisationDescription: descriptionBytes,
+		Logger:                           logger,
 		ID:                               id,
 		Joined:                           joined,
 	}
-	return New(config), nil
+	return New(config)
 }

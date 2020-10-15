@@ -11,6 +11,7 @@ import (
 
 	"github.com/status-im/status-go/eth-node/crypto"
 	"github.com/status-im/status-go/eth-node/types"
+	"github.com/status-im/status-go/protocol/common"
 	"github.com/status-im/status-go/protocol/protobuf"
 )
 
@@ -29,7 +30,8 @@ func NewManager(db *sql.DB, logger *zap.Logger) (*Manager, error) {
 	return &Manager{
 		logger: logger,
 		persistence: &Persistence{
-			db: db,
+			logger: logger,
+			db:     db,
 		},
 	}, nil
 }
@@ -92,10 +94,15 @@ func (m *Manager) CreateOrganisation(description *protobuf.OrganisationDescripti
 	config := Config{
 		ID:                      &key.PublicKey,
 		PrivateKey:              key,
+		Logger:                  m.logger,
 		Joined:                  true,
 		OrganisationDescription: description,
 	}
-	org := New(config)
+	org, err := New(config)
+	if err != nil {
+		return nil, err
+	}
+
 	err = m.persistence.SaveOrganisation(org)
 	if err != nil {
 		return nil, err
@@ -143,11 +150,15 @@ func (m *Manager) HandleOrganisationDescriptionMessage(signer *ecdsa.PublicKey, 
 		m.logger.Debug("initializing new organisation")
 		config := Config{
 			OrganisationDescription:          description,
+			Logger:                           m.logger,
 			MarshaledOrganisationDescription: payload,
 			ID:                               signer,
 		}
 
-		org = New(config)
+		org, err = New(config)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	_, err = org.HandleOrganisationDescription(signer, description, payload)
@@ -250,6 +261,11 @@ func (m *Manager) InviteUserToOrganisation(idString string, pk *ecdsa.PublicKey)
 		return nil, err
 	}
 
+	err = m.persistence.SaveOrganisation(org)
+	if err != nil {
+		return nil, err
+	}
+
 	m.publish(&Subscription{Organisation: org, Invitation: invitation})
 
 	return org, nil
@@ -261,4 +277,16 @@ func (m *Manager) GetByIDString(idString string) (*Organisation, error) {
 		return nil, err
 	}
 	return m.persistence.GetByID(id)
+}
+
+func (m *Manager) CanPost(pk *ecdsa.PublicKey, orgIDString, chatID string, grant []byte) (bool, error) {
+	org, err := m.GetByIDString(orgIDString)
+	if err != nil {
+		return false, err
+	}
+	if org == nil {
+		return false, nil
+	}
+	m.logger.Debug("CANPOST", zap.Any("org", org), zap.String("chat-id", chatID), zap.String("pk", common.PubkeyToHex(pk)))
+	return org.CanPost(pk, chatID, grant)
 }

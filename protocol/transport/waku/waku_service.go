@@ -127,6 +127,10 @@ func (a *Transport) InitFilters(chatIDs []string, publicKeys []*ecdsa.PublicKey)
 	return a.filters.Init(chatIDs, publicKeys)
 }
 
+func (a *Transport) InitPublicFilters(chatIDs []string) ([]*transport.Filter, error) {
+	return a.filters.InitPublicFilters(chatIDs)
+}
+
 func (a *Transport) Filters() []*transport.Filter {
 	return a.filters.Filters()
 }

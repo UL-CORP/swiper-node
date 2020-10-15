@@ -418,8 +418,9 @@ func (s *OrganisationSuite) TestHandleRequestJoin() {
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			org := New(tc.config)
-			err := org.HandleRequestJoin(tc.signer, tc.request)
+			org, err := New(tc.config)
+			s.Require().NoError(err)
+			err = org.HandleRequestJoin(tc.signer, tc.request)
 			s.Require().Equal(tc.err, err)
 		})
 	}
@@ -515,7 +516,9 @@ func (s *OrganisationSuite) TestCanPost() {
 		s.Run(tc.name, func() {
 			var grant []byte
 			var err error
-			org := New(tc.config)
+			org, err := New(tc.config)
+			s.Require().NoError(err)
+
 			if tc.grant == validGrant {
 				grant, err = org.buildGrant(tc.member, testChatID1)
 				// We lower the clock of the description to simulate
@@ -903,7 +906,8 @@ func (s *OrganisationSuite) buildOrganisation(owner *ecdsa.PublicKey) *Organisat
 	config.ID = owner
 	config.OrganisationDescription = s.buildOrganisationDescription()
 
-	org := New(config)
+	org, err := New(config)
+	s.Require().NoError(err)
 	return org
 }
 

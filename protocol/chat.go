@@ -32,6 +32,8 @@ const (
 	ChatTypeOrganisationChat
 )
 
+const pkStringLength = 68
+
 type Chat struct {
 	// ID is the id of the chat, for public chats it is the name e.g. status, for one-to-one
 	// is the hex encoded public key and for group chats is a random uuid appended with
@@ -98,6 +100,15 @@ func (c *Chat) ProfileUpdates() bool {
 
 func (c *Chat) OneToOne() bool {
 	return c.ChatType == ChatTypeOneToOne
+}
+
+// Strips out the local prefix of the organisation-id
+func (c *Chat) OrganisationChatID() string {
+	if c.ChatType != ChatTypeOrganisationChat {
+		return c.ID
+	}
+
+	return c.ID[pkStringLength:]
 }
 
 func (c *Chat) Validate() error {

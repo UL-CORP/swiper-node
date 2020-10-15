@@ -348,3 +348,112 @@ func (s *MessengerOrganisationsSuite) TestInviteUserToOrganisation() {
 	organisation = response.Organisations[0]
 	s.Require().True(organisation.HasMember(&s.alice.identity.PublicKey))
 }
+
+func (s *MessengerOrganisationsSuite) TestPostToOrganisationChat() {
+	description := &protobuf.OrganisationDescription{
+		Permissions: &protobuf.OrganisationPermissions{
+			Access: protobuf.OrganisationPermissions_INVITATION_ONLY,
+		},
+		Identity: &protobuf.ChatIdentity{
+			DisplayName: "status",
+			Description: "status organisation description",
+		},
+	}
+
+	// Create an organisation chat
+	response, err := s.bob.CreateOrganisation(description)
+	s.Require().NoError(err)
+	s.Require().NotNil(response)
+	s.Require().Len(response.Organisations, 1)
+
+	organisation := response.Organisations[0]
+
+	// Create chat
+	orgChat := &protobuf.OrganisationChat{
+		Permissions: &protobuf.OrganisationPermissions{
+			Access: protobuf.OrganisationPermissions_NO_MEMBERSHIP,
+		},
+		Identity: &protobuf.ChatIdentity{
+			DisplayName: "status-core",
+			Description: "status-core organisation chat",
+		},
+	}
+
+	response, err = s.bob.CreateOrganisationChat(organisation.IDString(), orgChat)
+	s.Require().NoError(err)
+	s.Require().NotNil(response)
+	s.Require().Len(response.Organisations, 1)
+	s.Require().Len(response.Chats, 1)
+
+	response, err = s.bob.InviteUserToOrganisation(organisation.IDString(), common.PubkeyToHex(&s.alice.identity.PublicKey))
+	s.Require().NoError(err)
+	s.Require().NotNil(response)
+	s.Require().Len(response.Organisations, 1)
+
+	organisation = response.Organisations[0]
+	s.Require().True(organisation.HasMember(&s.alice.identity.PublicKey))
+
+	// Pull message and make sure org is received
+	err = tt.RetryWithBackOff(func() error {
+		response, err = s.alice.RetrieveAll()
+		if err != nil {
+			return err
+		}
+		if len(response.Organisations) == 0 {
+			return errors.New("organisation not received")
+		}
+		return nil
+	})
+
+	s.Require().NoError(err)
+	organisations, err := s.alice.Organisations()
+	s.Require().NoError(err)
+	s.Require().Len(organisations, 1)
+	s.Require().Len(response.Organisations, 1)
+
+	// We join the org
+	response, err = s.alice.JoinOrganisation(organisation.IDString())
+	s.Require().NoError(err)
+	s.Require().NotNil(response)
+	s.Require().Len(response.Organisations, 1)
+	s.Require().True(response.Organisations[0].Joined())
+	s.Require().Len(response.Chats, 1)
+	s.Require().Len(response.Filters, 2)
+
+	var orgFilterFound bool
+	var chatFilterFound bool
+	for _, f := range response.Filters {
+		orgFilterFound = orgFilterFound || f.ChatID == response.Organisations[0].IDString()
+		chatFilterFound = chatFilterFound || f.ChatID == response.Chats[0].ID
+	}
+	// Make sure an organisation filter has been created
+	s.Require().True(orgFilterFound)
+	// Make sure the chat filter has been created
+	s.Require().True(chatFilterFound)
+
+	chatID := response.Chats[0].ID
+	inputMessage := &common.Message{}
+	inputMessage.ChatId = chatID
+	inputMessage.ContentType = protobuf.ChatMessage_TEXT_PLAIN
+	inputMessage.Text = "some text"
+
+	_, err = s.alice.SendChatMessage(context.Background(), inputMessage)
+	s.NoError(err)
+
+	// Pull message and make sure org is received
+	err = tt.RetryWithBackOff(func() error {
+		response, err = s.bob.RetrieveAll()
+		if err != nil {
+			return err
+		}
+		if len(response.Messages) == 0 {
+			return errors.New("message not received")
+		}
+		return nil
+	})
+
+	s.Require().NoError(err)
+	s.Require().Len(response.Messages, 1)
+	s.Require().Len(response.Chats, 1)
+	s.Require().Equal(chatID, response.Chats[0].ID)
+}

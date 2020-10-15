@@ -1572,14 +1572,19 @@ func (m *Messenger) JoinOrganisation(organisationID string) (*MessengerResponse,
 	if err != nil {
 		return nil, err
 	}
+
+	chatIDs := []string{org.IDString()}
+
 	chats := CreateOrganisationChats(org, m.getTimesource())
-	for _, chat := range chats {
-		m.allChats[chat.ID] = &chat
-		response.Chats = append(response.Chats, &chat)
+
+	// Beware don't use `chat` as a reference
+	for i, chat := range chats {
+		chatIDs = append(chatIDs, chat.ID)
+		response.Chats = append(response.Chats, &chats[i])
 	}
 
 	// Load transport filters
-	filters, err := m.transport.InitFilters([]string{org.IDString()}, nil)
+	filters, err := m.transport.InitPublicFilters(chatIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -1587,7 +1592,7 @@ func (m *Messenger) JoinOrganisation(organisationID string) (*MessengerResponse,
 	response.Filters = filters
 	response.Organisations = []*organisations.Organisation{org}
 
-	return response, nil
+	return response, m.saveChats(response.Chats)
 }
 
 func (m *Messenger) LeaveOrganisation(organisationID string) (*MessengerResponse, error) {
@@ -1623,15 +1628,25 @@ func (m *Messenger) CreateOrganisationChat(orgID string, c *protobuf.Organisatio
 		return nil, err
 	}
 	var chats []*Chat
+	var chatIDs []string
 	for chatID, chat := range changes.ChatsAdded {
 		c := CreateOrganisationChat(org.IDString(), chatID, chat, m.getTimesource())
 		chats = append(chats, &c)
+		chatIDs = append(chatIDs, c.ID)
 	}
+
+	// Load filters
+	filters, err := m.transport.InitPublicFilters(chatIDs)
+	if err != nil {
+		return nil, err
+	}
+
 	return &MessengerResponse{
 		Organisations:       []*organisations.Organisation{org},
 		Chats:               chats,
+		Filters:             filters,
 		OrganisationChanges: []*organisations.OrganisationChanges{changes},
-	}, nil
+	}, m.saveChats(chats)
 }
 
 func (m *Messenger) CreateOrganisation(description *protobuf.OrganisationDescription) (*MessengerResponse, error) {
@@ -1894,7 +1909,23 @@ func (m *Messenger) dispatchMessage(ctx context.Context, spec common.RawMessage)
 		if err != nil {
 			return nil, err
 		}
+	case ChatTypeOrganisationChat:
+		// TODO: add grant
+		canPost, err := m.organisationsManager.CanPost(&m.identity.PublicKey, chat.OrganisationID, chat.OrganisationChatID(), nil)
+		if err != nil {
+			return nil, err
+		}
+		if !canPost {
+			m.logger.Error("can't post on chat", zap.String("chat-id", chat.ID), zap.String("chat-name", chat.Name))
 
+			return nil, errors.New("can't post on chat")
+		}
+
+		logger.Debug("sending organisation chat message", zap.String("chatName", chat.Name))
+		id, err = m.processor.SendPublic(ctx, chat.ID, spec)
+		if err != nil {
+			return nil, err
+		}
 	case ChatTypePrivateGroupChat:
 		logger.Debug("sending group message", zap.String("chatName", chat.Name))
 		if spec.Recipients == nil {
@@ -4060,6 +4091,14 @@ func (m *Messenger) encodeChatEntity(chat *Chat, message common.ChatEntity) ([]b
 	case ChatTypePublic, ChatTypeProfile:
 		l.Debug("sending public message", zap.String("chatName", chat.Name))
 		message.SetMessageType(protobuf.MessageType_PUBLIC_GROUP)
+		encodedMessage, err = proto.Marshal(message.GetProtobuf())
+		if err != nil {
+			return nil, err
+		}
+	case ChatTypeOrganisationChat:
+		l.Debug("sending organisation chat message", zap.String("chatName", chat.Name))
+		// TODO: add grant
+		message.SetMessageType(protobuf.MessageType_ORGANISATION_CHAT)
 		encodedMessage, err = proto.Marshal(message.GetProtobuf())
 		if err != nil {
 			return nil, err

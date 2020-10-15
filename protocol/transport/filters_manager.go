@@ -121,6 +121,19 @@ func (s *FiltersManager) Init(
 	return allFilters, nil
 }
 
+func (s *FiltersManager) InitPublicFilters(chatIDs []string) ([]*Filter, error) {
+	var filters []*Filter
+	// Add public, one-to-one and negotiated filters.
+	for _, chatID := range chatIDs {
+		f, err := s.LoadPublic(chatID)
+		if err != nil {
+			return nil, err
+		}
+		filters = append(filters, f)
+	}
+	return filters, nil
+}
+
 // DEPRECATED
 func (s *FiltersManager) InitWithFilters(filters []*Filter) ([]*Filter, error) {
 	var (

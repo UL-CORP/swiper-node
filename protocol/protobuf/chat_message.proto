@@ -62,6 +62,9 @@ message ChatMessage {
     bytes organisation = 12;
   }
 
+  // Grant for organisation chat messages
+  bytes grant = 13;
+
   enum ContentType {
     UNKNOWN_CONTENT_TYPE = 0;
     TEXT_PLAIN = 1;

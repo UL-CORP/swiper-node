@@ -214,6 +214,7 @@ func (p *MessageProcessor) sendPrivate(
 		messageIDs := [][]byte{messageID}
 		hash, newMessage, err := p.sendPrivateRawMessage(ctx, recipient, wrappedMessage, messageIDs)
 		if err != nil {
+			p.logger.Error("failed to send a private message", zap.Error(err))
 			return nil, errors.Wrap(err, "failed to send a message spec")
 		}
 
@@ -238,6 +239,7 @@ func (p *MessageProcessor) sendPrivate(
 		messageIDs := [][]byte{messageID}
 		hash, newMessage, err := p.sendMessageSpec(ctx, recipient, messageSpec, messageIDs)
 		if err != nil {
+			p.logger.Error("failed to send a private message", zap.Error(err))
 			return nil, errors.Wrap(err, "failed to send a message spec")
 		}
 
@@ -328,6 +330,7 @@ func (p *MessageProcessor) SendPublic(
 
 	messageSpec, err := p.protocol.BuildPublicMessage(p.identity, wrappedMessage)
 	if err != nil {
+		p.logger.Error("failed to send a public message", zap.Error(err))
 		return nil, errors.Wrap(err, "failed to wrap a public message in the encryption layer")
 	}
 
@@ -531,6 +534,7 @@ func (p *MessageProcessor) sendDataSync(ctx context.Context, publicKey *ecdsa.Pu
 
 	hash, newMessage, err := p.sendMessageSpec(ctx, publicKey, messageSpec, messageIDs)
 	if err != nil {
+		p.logger.Error("failed to send a datasync message", zap.Error(err))
 		return err
 	}
 
