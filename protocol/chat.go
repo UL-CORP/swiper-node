@@ -269,15 +269,22 @@ func CreateOneToOneChat(name string, publicKey *ecdsa.PublicKey, timesource comm
 }
 
 func CreateOrganisationChat(orgID, chatID string, orgChat *protobuf.OrganisationChat, timesource common.TimeSource) Chat {
+	color := orgChat.Identity.Color
+	if color == "" {
+		color = chatColors[rand.Intn(len(chatColors))]
+	}
+
 	return Chat{
 		OrganisationID: orgID,
 		Name:           orgChat.Identity.DisplayName,
 		Active:         true,
+		Color:          color,
 		ID:             orgID + chatID,
 		Timestamp:      int64(timesource.GetCurrentTime()),
 		ChatType:       ChatTypeOrganisationChat,
 	}
 }
+
 func CreateOrganisationChats(org *organisations.Organisation, timesource common.TimeSource) []Chat {
 	var chats []Chat
 	orgID := org.IDString()

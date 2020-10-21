@@ -20,6 +20,8 @@ message ChatIdentity {
 
   // description is the user set description, valid only for organisations
   string description = 5;
+
+  string color = 6;
 }
 
 // ProfileImage represents data associated with a user's profile image

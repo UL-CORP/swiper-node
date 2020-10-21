@@ -50,7 +50,7 @@ func (o *Organisation) MarshalJSON() ([]byte, error) {
 	item := struct {
 		ID                                string `json:"id"`
 		*protobuf.OrganisationDescription `json:"description"`
-		Admin                             bool `json:admin"`
+		Admin                             bool `json:"admin"`
 		Joined                            bool `json:"joined"`
 	}{
 		ID:                      o.IDString(),
