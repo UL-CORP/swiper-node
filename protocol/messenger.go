@@ -1595,6 +1595,7 @@ func (m *Messenger) JoinOrganisation(organisationID string) (*MessengerResponse,
 	return response, m.saveChats(response.Chats)
 }
 
+// TODO: Test this, make sure is actually removed
 func (m *Messenger) LeaveOrganisation(organisationID string) (*MessengerResponse, error) {
 	response := &MessengerResponse{}
 
@@ -1605,12 +1606,13 @@ func (m *Messenger) LeaveOrganisation(organisationID string) (*MessengerResponse
 
 	// Make chat inactive
 	for chatID, _ := range org.Chats() {
-		err := m.DeleteChat(chatID)
+		orgChatID := organisationID + chatID
+		err := m.DeleteChat(orgChatID)
 		if err != nil {
 			return nil, err
 		}
-		response.RemovedChats = append(response.RemovedChats, chatID)
-		response.RemovedFilters = append(response.RemovedFilters, chatID)
+		response.RemovedChats = append(response.RemovedChats, orgChatID)
+		response.RemovedFilters = append(response.RemovedFilters, orgChatID)
 	}
 
 	err = m.transport.RemoveFilterByChatID(organisationID)

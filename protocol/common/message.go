@@ -159,7 +159,7 @@ func (m *Message) MarshalJSON() ([]byte, error) {
 		Image             string                           `json:"image,omitempty"`
 		Audio             string                           `json:"audio,omitempty"`
 		AudioDurationMs   uint64                           `json:"audioDurationMs,omitempty"`
-		OrganisationID    string                           `json:"organisationID,omitempty"`
+		OrganisationID    string                           `json:"organisationId,omitempty"`
 		Sticker           *StickerAlias                    `json:"sticker"`
 		CommandParameters *CommandParameters               `json:"commandParameters"`
 		Timestamp         uint64                           `json:"timestamp"`
