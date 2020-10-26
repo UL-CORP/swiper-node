@@ -37,8 +37,8 @@ func NewManager(db *sql.DB, logger *zap.Logger) (*Manager, error) {
 }
 
 type Subscription struct {
-	Community *Community
-	Invitation   *protobuf.CommunityInvitation
+	Community  *Community
+	Invitation *protobuf.CommunityInvitation
 }
 
 func (m *Manager) Subscribe() chan *Subscription {
@@ -92,10 +92,10 @@ func (m *Manager) CreateCommunity(description *protobuf.CommunityDescription) (*
 	}
 
 	config := Config{
-		ID:                      &key.PublicKey,
-		PrivateKey:              key,
-		Logger:                  m.logger,
-		Joined:                  true,
+		ID:                   &key.PublicKey,
+		PrivateKey:           key,
+		Logger:               m.logger,
+		Joined:               true,
 		CommunityDescription: description,
 	}
 	org, err := New(config)
@@ -109,6 +109,44 @@ func (m *Manager) CreateCommunity(description *protobuf.CommunityDescription) (*
 	}
 
 	m.publish(&Subscription{Community: org})
+
+	return org, nil
+}
+
+func (m *Manager) ExportCommunity(idString string) (*ecdsa.PrivateKey, error) {
+	org, err := m.GetByIDString(idString)
+	if err != nil {
+		return nil, err
+	}
+
+	if org.config.PrivateKey == nil {
+		return nil, errors.New("not an admin")
+	}
+
+	return org.config.PrivateKey, nil
+}
+
+func (m *Manager) ImportCommunity(key *ecdsa.PrivateKey) (*Community, error) {
+	description := &protobuf.CommunityDescription{
+		Permissions: &protobuf.CommunityPermissions{},
+	}
+
+	config := Config{
+		ID:                   &key.PublicKey,
+		PrivateKey:           key,
+		Logger:               m.logger,
+		Joined:               true,
+		CommunityDescription: description,
+	}
+	org, err := New(config)
+	if err != nil {
+		return nil, err
+	}
+
+	err = m.persistence.SaveCommunity(org)
+	if err != nil {
+		return nil, err
+	}
 
 	return org, nil
 }
@@ -141,6 +179,7 @@ func (m *Manager) CreateChat(idString string, chat *protobuf.CommunityChat) (*Co
 
 func (m *Manager) HandleCommunityDescriptionMessage(signer *ecdsa.PublicKey, description *protobuf.CommunityDescription, payload []byte) (*Community, error) {
 	id := crypto.CompressPubkey(signer)
+	m.logger.Debug("INITIALIZING", zap.String("id", types.EncodeHex(id)))
 	org, err := m.persistence.GetByID(id)
 	if err != nil {
 		return nil, err
@@ -150,9 +189,9 @@ func (m *Manager) HandleCommunityDescriptionMessage(signer *ecdsa.PublicKey, des
 		m.logger.Debug("initializing new community")
 		config := Config{
 			CommunityDescription:          description,
-			Logger:                           m.logger,
+			Logger:                        m.logger,
 			MarshaledCommunityDescription: payload,
-			ID:                               signer,
+			ID:                            signer,
 		}
 
 		org, err = New(config)
@@ -222,7 +261,6 @@ func (m *Manager) JoinCommunity(idString string) (*Community, error) {
 		return nil, ErrOrgNotFound
 	}
 	org.Join()
-	m.logger.Debug("SAVING", zap.Any("ORG", org))
 	err = m.persistence.SaveCommunity(org)
 	if err != nil {
 		return nil, err

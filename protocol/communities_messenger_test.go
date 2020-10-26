@@ -457,3 +457,59 @@ func (s *MessengerCommunitiesSuite) TestPostToCommunityChat() {
 	s.Require().Len(response.Chats, 1)
 	s.Require().Equal(chatID, response.Chats[0].ID)
 }
+
+func (s *MessengerCommunitiesSuite) TestImportCommunity() {
+	description := &protobuf.CommunityDescription{
+		Permissions: &protobuf.CommunityPermissions{
+			Access: protobuf.CommunityPermissions_NO_MEMBERSHIP,
+		},
+		Identity: &protobuf.ChatIdentity{
+			DisplayName: "status",
+			Description: "status community description",
+		},
+	}
+
+	// Create an community chat
+	response, err := s.bob.CreateCommunity(description)
+	s.Require().NoError(err)
+	s.Require().NotNil(response)
+	s.Require().Len(response.Communities, 1)
+
+	s.bob.logger.Info("communitise", zap.Any("COMM", response.Communities))
+
+	community := response.Communities[0]
+
+	privateKey, err := s.bob.ExportCommunity(community.IDString())
+	s.Require().NoError(err)
+
+	response, err = s.alice.ImportCommunity(privateKey)
+	s.Require().NoError(err)
+	s.Require().Len(response.Filters, 1)
+
+	// Invite user on bob side
+	newUser, err := crypto.GenerateKey()
+	s.Require().NoError(err)
+
+	_, err = s.bob.InviteUserToCommunity(community.IDString(), common.PubkeyToHex(&newUser.PublicKey))
+	s.Require().NoError(err)
+
+	// Pull message and make sure org is received
+	err = tt.RetryWithBackOff(func() error {
+		response, err = s.alice.RetrieveAll()
+		if err != nil {
+			return err
+		}
+		if len(response.Communities) == 0 {
+			return errors.New("community not received")
+		}
+		return nil
+	})
+
+	s.bob.logger.Info("communitise", zap.Any("COMM", response.Communities))
+	s.Require().NoError(err)
+	s.Require().Len(response.Communities, 1)
+	community = response.Communities[0]
+	s.Require().True(community.Joined())
+	s.Require().True(community.IsAdmin())
+	s.Require().True(community.HasMember(&newUser.PublicKey))
+}

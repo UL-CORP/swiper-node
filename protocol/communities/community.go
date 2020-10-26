@@ -19,12 +19,12 @@ import (
 const signatureLength = 65
 
 type Config struct {
-	PrivateKey                       *ecdsa.PrivateKey
+	PrivateKey                    *ecdsa.PrivateKey
 	CommunityDescription          *protobuf.CommunityDescription
 	MarshaledCommunityDescription []byte
-	ID                               *ecdsa.PublicKey
-	Joined                           bool
-	Logger                           *zap.Logger
+	ID                            *ecdsa.PublicKey
+	Joined                        bool
+	Logger                        *zap.Logger
 }
 
 type Community struct {
@@ -48,15 +48,15 @@ func New(config Config) (*Community, error) {
 
 func (o *Community) MarshalJSON() ([]byte, error) {
 	item := struct {
-		ID                                string `json:"id"`
+		ID                             string `json:"id"`
 		*protobuf.CommunityDescription `json:"description"`
-		Admin                             bool `json:"admin"`
-		Joined                            bool `json:"joined"`
+		Admin                          bool `json:"admin"`
+		Joined                         bool `json:"joined"`
 	}{
-		ID:                      o.IDString(),
+		ID:                   o.IDString(),
 		CommunityDescription: o.config.CommunityDescription,
-		Admin:                   o.config.PrivateKey != nil,
-		Joined:                  o.config.Joined,
+		Admin:                o.IsAdmin(),
+		Joined:               o.config.Joined,
 	}
 	return json.Marshal(item)
 }
@@ -675,9 +675,9 @@ func (o *Community) canPostWithGrant(pk *ecdsa.PublicKey, chatID string, grantBy
 func (o *Community) buildGrant(key *ecdsa.PublicKey, chatID string) ([]byte, error) {
 	grant := &protobuf.Grant{
 		CommunityId: o.ID(),
-		MemberId:       crypto.CompressPubkey(key),
-		ChatId:         chatID,
-		Clock:          o.config.CommunityDescription.Clock,
+		MemberId:    crypto.CompressPubkey(key),
+		ChatId:      chatID,
+		Clock:       o.config.CommunityDescription.Clock,
 	}
 	marshaledGrant, err := proto.Marshal(grant)
 	if err != nil {

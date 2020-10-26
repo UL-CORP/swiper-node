@@ -336,7 +336,8 @@ func (m *MessageHandler) HandleCommunityDescription(state *ReceivedMessageState,
 	if err != nil {
 		return err
 	}
-	state.Response.Communities = append(state.Response.Communities, community)
+
+	state.AllCommunities[community.IDString()] = community
 
 	// If we haven't joined the org, nothing to do
 	if !community.Joined() {
@@ -369,7 +370,9 @@ func (m *MessageHandler) HandleCommunityDescription(state *ReceivedMessageState,
 		return err
 	}
 
-	state.Response.Filters = filters
+	for _, filter := range filters {
+		state.AllFilters[filter.ChatID] = filter
+	}
 
 	return nil
 }

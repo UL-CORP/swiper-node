@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/status-im/status-go/eth-node/crypto"
+	"github.com/status-im/status-go/eth-node/types"
 	"github.com/status-im/status-go/protocol/protobuf"
 )
 
@@ -23,6 +24,8 @@ func (p *Persistence) SaveCommunity(community *Community) error {
 	if err != nil {
 		return err
 	}
+
+	p.logger.Debug("SAVING", zap.String("id", types.EncodeHex(id)))
 
 	_, err = p.db.Exec(`INSERT INTO communities_communities (id, private_key, description, joined) VALUES (?, ?, ?,?)`, id, crypto.FromECDSA(privateKey), description, community.config.Joined)
 	return err
@@ -52,6 +55,7 @@ func (p *Persistence) queryCommunities(query string) ([]*Community, error) {
 		response = append(response, org)
 	}
 
+	p.logger.Info("COUNT", zap.Int("count", len(response)))
 	return response, nil
 
 }
@@ -117,12 +121,12 @@ func unmarshalCommunityFromDB(publicKeyBytes, privateKeyBytes, descriptionBytes 
 	}
 
 	config := Config{
-		PrivateKey:                       privateKey,
+		PrivateKey:                    privateKey,
 		CommunityDescription:          description,
 		MarshaledCommunityDescription: descriptionBytes,
-		Logger:                           logger,
-		ID:                               id,
-		Joined:                           joined,
+		Logger:                        logger,
+		ID:                            id,
+		Joined:                        joined,
 	}
 	return New(config)
 }

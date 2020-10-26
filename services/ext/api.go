@@ -334,6 +334,24 @@ func (api *PublicAPI) CreateCommunity(description *protobuf.CommunityDescription
 
 }
 
+func (api *PublicAPI) ExportCommunity(id string) (string, error) {
+	key, err := api.service.messenger.ExportCommunity(id)
+	if err != nil {
+		return "", err
+	}
+	return types.EncodeHex(crypto.FromECDSA(key)), nil
+}
+
+func (api *PublicAPI) ImportCommunity(hexPrivateKey string) (*protocol.MessengerResponse, error) {
+	// Strip the 0x from the beginning
+	privateKey, err := crypto.HexToECDSA(hexPrivateKey[2:])
+	if err != nil {
+		return nil, err
+	}
+	return api.service.messenger.ImportCommunity(privateKey)
+
+}
+
 func (api *PublicAPI) CreateCommunityChat(orgID string, c *protobuf.CommunityChat) (*protocol.MessengerResponse, error) {
 	return api.service.messenger.CreateCommunityChat(orgID, c)
 }
