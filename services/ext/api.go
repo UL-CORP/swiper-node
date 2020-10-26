@@ -17,8 +17,8 @@ import (
 	"github.com/status-im/status-go/mailserver"
 	"github.com/status-im/status-go/protocol"
 	"github.com/status-im/status-go/protocol/common"
+	"github.com/status-im/status-go/protocol/communities"
 	"github.com/status-im/status-go/protocol/encryption/multidevice"
-	"github.com/status-im/status-go/protocol/organisations"
 	"github.com/status-im/status-go/protocol/protobuf"
 	"github.com/status-im/status-go/protocol/pushnotificationclient"
 	"github.com/status-im/status-go/protocol/transport"
@@ -317,29 +317,29 @@ func (api *PublicAPI) SetInstallationMetadata(installationID string, data *multi
 	return api.service.messenger.SetInstallationMetadata(installationID, data)
 }
 
-func (api *PublicAPI) Organisations(parent context.Context) ([]*organisations.Organisation, error) {
-	return api.service.messenger.Organisations()
+func (api *PublicAPI) Communities(parent context.Context) ([]*communities.Community, error) {
+	return api.service.messenger.Communities()
 }
 
-func (api *PublicAPI) JoinOrganisation(parent context.Context, organisationID string) (*protocol.MessengerResponse, error) {
-	return api.service.messenger.JoinOrganisation(organisationID)
+func (api *PublicAPI) JoinCommunity(parent context.Context, communityID string) (*protocol.MessengerResponse, error) {
+	return api.service.messenger.JoinCommunity(communityID)
 }
 
-func (api *PublicAPI) LeaveOrganisation(parent context.Context, organisationID string) (*protocol.MessengerResponse, error) {
-	return api.service.messenger.LeaveOrganisation(organisationID)
+func (api *PublicAPI) LeaveCommunity(parent context.Context, communityID string) (*protocol.MessengerResponse, error) {
+	return api.service.messenger.LeaveCommunity(communityID)
 }
 
-func (api *PublicAPI) CreateOrganisation(description *protobuf.OrganisationDescription) (*protocol.MessengerResponse, error) {
-	return api.service.messenger.CreateOrganisation(description)
+func (api *PublicAPI) CreateCommunity(description *protobuf.CommunityDescription) (*protocol.MessengerResponse, error) {
+	return api.service.messenger.CreateCommunity(description)
 
 }
 
-func (api *PublicAPI) CreateOrganisationChat(orgID string, c *protobuf.OrganisationChat) (*protocol.MessengerResponse, error) {
-	return api.service.messenger.CreateOrganisationChat(orgID, c)
+func (api *PublicAPI) CreateCommunityChat(orgID string, c *protobuf.CommunityChat) (*protocol.MessengerResponse, error) {
+	return api.service.messenger.CreateCommunityChat(orgID, c)
 }
 
-func (api *PublicAPI) InviteUserToOrganisation(orgID, userPublicKey string) (*protocol.MessengerResponse, error) {
-	return api.service.messenger.InviteUserToOrganisation(orgID, userPublicKey)
+func (api *PublicAPI) InviteUserToCommunity(orgID, userPublicKey string) (*protocol.MessengerResponse, error) {
+	return api.service.messenger.InviteUserToCommunity(orgID, userPublicKey)
 }
 
 type ApplicationMessagesResponse struct {

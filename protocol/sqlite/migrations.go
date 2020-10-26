@@ -7,7 +7,7 @@ import (
 
 	encryptmigrations "github.com/status-im/status-go/protocol/encryption/migrations"
 	appmigrations "github.com/status-im/status-go/protocol/migrations"
-	organisations_migrations "github.com/status-im/status-go/protocol/organisations/migrations"
+	communities_migrations "github.com/status-im/status-go/protocol/communities/migrations"
 	push_notification_client_migrations "github.com/status-im/status-go/protocol/pushnotificationclient/migrations"
 	push_notification_server_migrations "github.com/status-im/status-go/protocol/pushnotificationserver/migrations"
 	wakumigrations "github.com/status-im/status-go/protocol/transport/waku/migrations"
@@ -47,8 +47,8 @@ var defaultMigrations = []migrationsWithGetter{
 		Getter: push_notification_client_migrations.Asset,
 	},
 	{
-		Names:  organisations_migrations.AssetNames(),
-		Getter: organisations_migrations.Asset,
+		Names:  communities_migrations.AssetNames(),
+		Getter: communities_migrations.Asset,
 	},
 }
 

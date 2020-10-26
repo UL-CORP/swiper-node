@@ -28,7 +28,7 @@
 // 1599641390_add_emoji_reactions_index.up.sql (126B)
 // 1599720851_add_seen_index_remove_long_messages.down.sql (96B)
 // 1599720851_add_seen_index_remove_long_messages.up.sql (150B)
-// 1602513851_add_organisations.up.sql (224B)
+// 1602513851_add_communities.up.sql (416B)
 // 1603198582_add_profile_chat_field.up.sql (45B)
 // 1603816533_add_links.down.sql (0)
 // 1603816533_add_links.up.sql (48B)
@@ -661,23 +661,23 @@ func _1599720851_add_seen_index_remove_long_messagesUpSql() (*asset, error) {
 	return a, nil
 }
 
-var __1602513851_add_organisationsUpSql = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\x72\xf4\x09\x71\x0d\x52\x08\x71\x74\xf2\x71\x55\x48\xce\x48\x2c\x29\x56\x70\x74\x71\x51\x70\xf6\xf7\x09\xf5\xf5\x53\xc8\x2f\x4a\x4f\xcc\xcb\x2c\x4e\x2c\xc9\xcc\xcf\x8b\xcf\x4c\x51\x08\x71\x8d\x08\x51\x70\x71\x75\x73\x0c\xf5\x09\x51\x50\x52\xb2\xe6\xe5\x0a\x0d\x70\x71\x0c\x81\xe9\x0c\x76\x0d\xc1\xd0\x62\x0b\x51\xc7\xcb\x85\x6c\x51\x69\x71\x6a\x51\x7c\x6e\x6a\x71\x71\x62\x7a\x2a\x79\x16\xa2\x9a\x80\xc7\x62\x40\x00\x00\x00\xff\xff\xb7\xb7\x44\xc0\xe0\x00\x00\x00")
+var __1602513851_add_communitiesUpSql = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\x9c\x8f\xc1\x6a\xbb\x40\x10\x87\xef\x82\xef\xf0\x23\xa7\xff\x1f\xfa\x06\xa1\x87\x55\x47\x90\x4e\x5c\x59\x47\x48\x4e\x22\xba\xb4\xdb\xa2\x06\xd7\x14\xf2\xf6\x45\x43\xda\x78\xe8\xa5\xb7\x65\xe7\xfb\xe6\x63\x14\x0b\x19\x88\x8a\x98\xd0\xbe\x35\xb3\x87\x4a\x12\xc4\x9a\xab\x43\x8e\x76\xec\xfb\xcb\xe0\xe6\x6b\xed\x3a\x08\x1d\x05\x09\xa5\xaa\x62\xc1\x6e\xb7\x0f\x83\xaa\x48\x94\xdc\xb5\x92\x64\xcb\x3f\xdf\xa0\x30\x78\x4c\x5c\xbc\x9d\xea\xde\x7a\xdf\xbc\xda\x3f\xa4\xb6\xfa\xef\xc9\xd8\xd0\x82\xdf\x9a\x59\x8a\x5c\x0b\xe8\x98\x95\x52\x7e\x0b\xce\xfa\xfa\xe1\x8d\x7f\x61\x00\xb8\x0e\x11\xeb\x68\xe5\xf3\x8a\x19\x85\xc9\x0e\xca\x9c\xf0\x42\x27\xe8\x1c\xb1\xce\x53\xce\x62\x81\xa1\x82\x55\x4c\x4f\x8b\x74\x9e\xdc\x67\x33\xdb\xfa\xc3\x5e\x57\x7b\xfd\xec\xac\x6f\x27\x77\x9e\xdd\x38\x6c\x57\xae\xd3\xf7\xd1\x0d\xb6\x43\xa4\x35\xff\xb4\xee\x07\xa7\x8a\x4b\x5a\xa8\xff\xfb\x30\xf8\x0a\x00\x00\xff\xff\x06\xa2\x62\x52\xa0\x01\x00\x00")
 
-func _1602513851_add_organisationsUpSqlBytes() ([]byte, error) {
+func _1602513851_add_communitiesUpSqlBytes() ([]byte, error) {
 	return bindataRead(
-		__1602513851_add_organisationsUpSql,
-		"1602513851_add_organisations.up.sql",
+		__1602513851_add_communitiesUpSql,
+		"1602513851_add_communities.up.sql",
 	)
 }
 
-func _1602513851_add_organisationsUpSql() (*asset, error) {
-	bytes, err := _1602513851_add_organisationsUpSqlBytes()
+func _1602513851_add_communitiesUpSql() (*asset, error) {
+	bytes, err := _1602513851_add_communitiesUpSqlBytes()
 	if err != nil {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "1602513851_add_organisations.up.sql", size: 224, mode: os.FileMode(0644), modTime: time.Unix(1603964571, 0)}
-	a := &asset{bytes: bytes, info: info, digest: [32]uint8{0xb6, 0x5, 0xeb, 0x62, 0xa8, 0xa6, 0xa7, 0x2b, 0xdc, 0xbb, 0xeb, 0x5a, 0x42, 0x35, 0x2d, 0xbe, 0xe1, 0x9e, 0x7f, 0xd7, 0x5b, 0x66, 0x5c, 0x29, 0xbc, 0x1d, 0x17, 0xdb, 0xd6, 0xa8, 0xc4, 0xeb}}
+	info := bindataFileInfo{name: "1602513851_add_communities.up.sql", size: 416, mode: os.FileMode(0644), modTime: time.Unix(1603964692, 0)}
+	a := &asset{bytes: bytes, info: info, digest: [32]uint8{0x70, 0xf0, 0xbd, 0xee, 0x7, 0x49, 0x9b, 0xd7, 0x32, 0x40, 0x67, 0x25, 0x9c, 0xd4, 0x5d, 0x79, 0x8b, 0xce, 0xd1, 0x4f, 0xf5, 0x48, 0xd2, 0xe0, 0xbb, 0x84, 0x93, 0xeb, 0x87, 0x21, 0x40, 0xf4}}
 	return a, nil
 }
 
@@ -908,7 +908,7 @@ var _bindata = map[string]func() (*asset, error){
 
 	"1599720851_add_seen_index_remove_long_messages.up.sql": _1599720851_add_seen_index_remove_long_messagesUpSql,
 
-	"1602513851_add_organisations.up.sql": _1602513851_add_organisationsUpSql,
+	"1602513851_add_communities.up.sql": _1602513851_add_communitiesUpSql,
 
 	"1603198582_add_profile_chat_field.up.sql": _1603198582_add_profile_chat_fieldUpSql,
 
@@ -988,7 +988,7 @@ var _bintree = &bintree{nil, map[string]*bintree{
 	"1599641390_add_emoji_reactions_index.up.sql":              &bintree{_1599641390_add_emoji_reactions_indexUpSql, map[string]*bintree{}},
 	"1599720851_add_seen_index_remove_long_messages.down.sql":  &bintree{_1599720851_add_seen_index_remove_long_messagesDownSql, map[string]*bintree{}},
 	"1599720851_add_seen_index_remove_long_messages.up.sql":    &bintree{_1599720851_add_seen_index_remove_long_messagesUpSql, map[string]*bintree{}},
-	"1602513851_add_organisations.up.sql":                      &bintree{_1602513851_add_organisationsUpSql, map[string]*bintree{}},
+	"1602513851_add_communities.up.sql":                        &bintree{_1602513851_add_communitiesUpSql, map[string]*bintree{}},
 	"1603198582_add_profile_chat_field.up.sql":                 &bintree{_1603198582_add_profile_chat_fieldUpSql, map[string]*bintree{}},
 	"1603816533_add_links.down.sql":                            &bintree{_1603816533_add_linksDownSql, map[string]*bintree{}},
 	"1603816533_add_links.up.sql":                              &bintree{_1603816533_add_linksUpSql, map[string]*bintree{}},

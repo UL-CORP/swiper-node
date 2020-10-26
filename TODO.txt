@@ -1,0 +1,3 @@
+//- fix casing
+- allow to add more people with a single request
+// - add color to identity

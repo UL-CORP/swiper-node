@@ -21,11 +21,11 @@ import (
 	"github.com/status-im/status-go/waku"
 )
 
-func TestMessengerOrganisationsSuite(t *testing.T) {
-	suite.Run(t, new(MessengerOrganisationsSuite))
+func TestMessengerCommunitiesSuite(t *testing.T) {
+	suite.Run(t, new(MessengerCommunitiesSuite))
 }
 
-type MessengerOrganisationsSuite struct {
+type MessengerCommunitiesSuite struct {
 	suite.Suite
 	bob   *Messenger
 	alice *Messenger
@@ -35,7 +35,7 @@ type MessengerOrganisationsSuite struct {
 	logger *zap.Logger
 }
 
-func (s *MessengerOrganisationsSuite) SetupTest() {
+func (s *MessengerCommunitiesSuite) SetupTest() {
 	s.logger = tt.MustCreateTestLogger()
 
 	config := waku.DefaultConfig
@@ -50,13 +50,13 @@ func (s *MessengerOrganisationsSuite) SetupTest() {
 	s.Require().NoError(s.alice.Start())
 }
 
-func (s *MessengerOrganisationsSuite) TearDownTest() {
+func (s *MessengerCommunitiesSuite) TearDownTest() {
 	s.Require().NoError(s.bob.Shutdown())
 	s.Require().NoError(s.alice.Shutdown())
 	_ = s.logger.Sync()
 }
 
-func (s *MessengerOrganisationsSuite) newMessengerWithOptions(shh types.Waku, privateKey *ecdsa.PrivateKey, options []Option) *Messenger {
+func (s *MessengerCommunitiesSuite) newMessengerWithOptions(shh types.Waku, privateKey *ecdsa.PrivateKey, options []Option) *Messenger {
 	m, err := NewMessenger(
 		privateKey,
 		&testNode{shh: shh},
@@ -71,7 +71,7 @@ func (s *MessengerOrganisationsSuite) newMessengerWithOptions(shh types.Waku, pr
 	return m
 }
 
-func (s *MessengerOrganisationsSuite) newMessengerWithKey(shh types.Waku, privateKey *ecdsa.PrivateKey) *Messenger {
+func (s *MessengerCommunitiesSuite) newMessengerWithKey(shh types.Waku, privateKey *ecdsa.PrivateKey) *Messenger {
 	tmpFile, err := ioutil.TempFile("", "")
 	s.Require().NoError(err)
 
@@ -84,39 +84,39 @@ func (s *MessengerOrganisationsSuite) newMessengerWithKey(shh types.Waku, privat
 	return s.newMessengerWithOptions(shh, privateKey, options)
 }
 
-func (s *MessengerOrganisationsSuite) newMessenger(shh types.Waku) *Messenger {
+func (s *MessengerCommunitiesSuite) newMessenger(shh types.Waku) *Messenger {
 	privateKey, err := crypto.GenerateKey()
 	s.Require().NoError(err)
 
 	return s.newMessengerWithKey(s.shh, privateKey)
 }
 
-func (s *MessengerOrganisationsSuite) TestRetrieveOrganisation() {
+func (s *MessengerCommunitiesSuite) TestRetrieveCommunity() {
 	alice := s.newMessenger(s.shh)
 
-	description := &protobuf.OrganisationDescription{
-		Permissions: &protobuf.OrganisationPermissions{
-			Access: protobuf.OrganisationPermissions_NO_MEMBERSHIP,
+	description := &protobuf.CommunityDescription{
+		Permissions: &protobuf.CommunityPermissions{
+			Access: protobuf.CommunityPermissions_NO_MEMBERSHIP,
 		},
 		Identity: &protobuf.ChatIdentity{
 			DisplayName: "status",
-			Description: "status organisation description",
+			Description: "status community description",
 		},
 	}
 
-	response, err := s.bob.CreateOrganisation(description)
+	response, err := s.bob.CreateCommunity(description)
 	s.Require().NoError(err)
 	s.Require().NotNil(response)
-	s.Require().Len(response.Organisations, 1)
-	organisation := response.Organisations[0]
+	s.Require().Len(response.Communities, 1)
+	community := response.Communities[0]
 
-	// Send an organisation message
+	// Send an community message
 	chat := CreateOneToOneChat(common.PubkeyToHex(&alice.identity.PublicKey), &alice.identity.PublicKey, s.alice.transport)
 
 	inputMessage := &common.Message{}
 	inputMessage.ChatId = chat.ID
 	inputMessage.Text = "some text"
-	inputMessage.OrganisationID = organisation.IDString()
+	inputMessage.CommunityID = community.IDString()
 
 	err = s.bob.SaveChat(&chat)
 	s.NoError(err)
@@ -129,79 +129,79 @@ func (s *MessengerOrganisationsSuite) TestRetrieveOrganisation() {
 		if err != nil {
 			return err
 		}
-		if len(response.Organisations) == 0 {
-			return errors.New("organisation not received")
+		if len(response.Communities) == 0 {
+			return errors.New("community not received")
 		}
 		return nil
 	})
 
 	s.Require().NoError(err)
-	organisations, err := alice.Organisations()
+	communities, err := alice.Communities()
 	s.Require().NoError(err)
-	s.Require().Len(organisations, 1)
-	s.Require().Len(response.Organisations, 1)
+	s.Require().Len(communities, 1)
+	s.Require().Len(response.Communities, 1)
 	s.Require().Len(response.Messages, 1)
-	s.Require().Equal(organisation.IDString(), response.Messages[0].OrganisationID)
+	s.Require().Equal(community.IDString(), response.Messages[0].CommunityID)
 }
 
-func (s *MessengerOrganisationsSuite) TestJoinOrganisation() {
+func (s *MessengerCommunitiesSuite) TestJoinCommunity() {
 	// start alice and enable sending push notifications
 	s.Require().NoError(s.alice.Start())
 
-	description := &protobuf.OrganisationDescription{
-		Permissions: &protobuf.OrganisationPermissions{
-			Access: protobuf.OrganisationPermissions_NO_MEMBERSHIP,
+	description := &protobuf.CommunityDescription{
+		Permissions: &protobuf.CommunityPermissions{
+			Access: protobuf.CommunityPermissions_NO_MEMBERSHIP,
 		},
 		Identity: &protobuf.ChatIdentity{
 			DisplayName: "status",
-			Description: "status organisation description",
+			Description: "status community description",
 		},
 	}
 
-	// Create an organisation chat
-	response, err := s.bob.CreateOrganisation(description)
+	// Create an community chat
+	response, err := s.bob.CreateCommunity(description)
 	s.Require().NoError(err)
 	s.Require().NotNil(response)
-	s.Require().Len(response.Organisations, 1)
+	s.Require().Len(response.Communities, 1)
 
-	organisation := response.Organisations[0]
+	community := response.Communities[0]
 
-	orgChat := &protobuf.OrganisationChat{
-		Permissions: &protobuf.OrganisationPermissions{
-			Access: protobuf.OrganisationPermissions_NO_MEMBERSHIP,
+	orgChat := &protobuf.CommunityChat{
+		Permissions: &protobuf.CommunityPermissions{
+			Access: protobuf.CommunityPermissions_NO_MEMBERSHIP,
 		},
 		Identity: &protobuf.ChatIdentity{
 			DisplayName: "status-core",
-			Description: "status-core organisation chat",
+			Description: "status-core community chat",
 		},
 	}
-	response, err = s.bob.CreateOrganisationChat(organisation.IDString(), orgChat)
+	response, err = s.bob.CreateCommunityChat(community.IDString(), orgChat)
 	s.Require().NoError(err)
 	s.Require().NotNil(response)
-	s.Require().Len(response.Organisations, 1)
+	s.Require().Len(response.Communities, 1)
 	s.Require().Len(response.Chats, 1)
 
 	createdChat := response.Chats[0]
-	s.Require().Equal(organisation.IDString(), createdChat.OrganisationID)
+	s.Require().Equal(community.IDString(), createdChat.CommunityID)
 	s.Require().Equal(orgChat.Identity.DisplayName, createdChat.Name)
 	s.Require().NotEmpty(createdChat.ID)
-	s.Require().Equal(ChatTypeOrganisationChat, createdChat.ChatType)
+	s.Require().Equal(ChatTypeCommunityChat, createdChat.ChatType)
 	s.Require().True(createdChat.Active)
 	s.Require().NotEmpty(createdChat.Timestamp)
-	s.Require().True(strings.HasPrefix(createdChat.ID, organisation.IDString()))
+	s.Require().True(strings.HasPrefix(createdChat.ID, community.IDString()))
 
-	// Make sure the changes are reflect in the organisation
-	organisation = response.Organisations[0]
-	chats := organisation.Chats()
+	// Make sure the changes are reflect in the community
+	community = response.Communities[0]
+	chats := community.Chats()
 	s.Require().Len(chats, 1)
 
-	// Send an organisation message
+	// Send an community message
 	chat := CreateOneToOneChat(common.PubkeyToHex(&s.alice.identity.PublicKey), &s.alice.identity.PublicKey, s.bob.transport)
 
 	inputMessage := &common.Message{}
 	inputMessage.ChatId = chat.ID
 	inputMessage.Text = "some text"
-	inputMessage.OrganisationID = organisation.IDString()
+	inputMessage.CommunityID = community.IDString()
 
 	err = s.bob.SaveChat(&chat)
 	s.NoError(err)
@@ -214,52 +214,52 @@ func (s *MessengerOrganisationsSuite) TestJoinOrganisation() {
 		if err != nil {
 			return err
 		}
-		if len(response.Organisations) == 0 {
-			return errors.New("organisation not received")
+		if len(response.Communities) == 0 {
+			return errors.New("community not received")
 		}
 		return nil
 	})
 
 	s.Require().NoError(err)
-	organisations, err := s.alice.Organisations()
+	communities, err := s.alice.Communities()
 	s.Require().NoError(err)
-	s.Require().Len(organisations, 1)
-	s.Require().Len(response.Organisations, 1)
+	s.Require().Len(communities, 1)
+	s.Require().Len(response.Communities, 1)
 	s.Require().Len(response.Messages, 1)
-	s.Require().Equal(organisation.IDString(), response.Messages[0].OrganisationID)
+	s.Require().Equal(community.IDString(), response.Messages[0].CommunityID)
 
 	// We join the org
-	response, err = s.alice.JoinOrganisation(organisation.IDString())
+	response, err = s.alice.JoinCommunity(community.IDString())
 	s.Require().NoError(err)
 	s.Require().NotNil(response)
-	s.Require().Len(response.Organisations, 1)
-	s.Require().True(response.Organisations[0].Joined())
+	s.Require().Len(response.Communities, 1)
+	s.Require().True(response.Communities[0].Joined())
 	s.Require().Len(response.Chats, 1)
 
 	// The chat should be created
 	createdChat = response.Chats[0]
-	s.Require().Equal(organisation.IDString(), createdChat.OrganisationID)
+	s.Require().Equal(community.IDString(), createdChat.CommunityID)
 	s.Require().Equal(orgChat.Identity.DisplayName, createdChat.Name)
 	s.Require().NotEmpty(createdChat.ID)
-	s.Require().Equal(ChatTypeOrganisationChat, createdChat.ChatType)
+	s.Require().Equal(ChatTypeCommunityChat, createdChat.ChatType)
 	s.Require().True(createdChat.Active)
 	s.Require().NotEmpty(createdChat.Timestamp)
-	s.Require().True(strings.HasPrefix(createdChat.ID, organisation.IDString()))
+	s.Require().True(strings.HasPrefix(createdChat.ID, community.IDString()))
 
 	// Create another org chat
-	orgChat = &protobuf.OrganisationChat{
-		Permissions: &protobuf.OrganisationPermissions{
-			Access: protobuf.OrganisationPermissions_NO_MEMBERSHIP,
+	orgChat = &protobuf.CommunityChat{
+		Permissions: &protobuf.CommunityPermissions{
+			Access: protobuf.CommunityPermissions_NO_MEMBERSHIP,
 		},
 		Identity: &protobuf.ChatIdentity{
 			DisplayName: "status-core-ui",
-			Description: "status-core-ui organisation chat",
+			Description: "status-core-ui community chat",
 		},
 	}
-	response, err = s.bob.CreateOrganisationChat(organisation.IDString(), orgChat)
+	response, err = s.bob.CreateCommunityChat(community.IDString(), orgChat)
 	s.Require().NoError(err)
 	s.Require().NotNil(response)
-	s.Require().Len(response.Organisations, 1)
+	s.Require().Len(response.Communities, 1)
 	s.Require().Len(response.Chats, 1)
 
 	// Pull message, this time it should be received as advertised automatically
@@ -268,64 +268,64 @@ func (s *MessengerOrganisationsSuite) TestJoinOrganisation() {
 		if err != nil {
 			return err
 		}
-		if len(response.Organisations) == 0 {
-			return errors.New("organisation not received")
+		if len(response.Communities) == 0 {
+			return errors.New("community not received")
 		}
 		return nil
 	})
 
 	s.Require().NoError(err)
-	organisations, err = s.alice.Organisations()
+	communities, err = s.alice.Communities()
 	s.Require().NoError(err)
-	s.Require().Len(organisations, 1)
-	s.Require().Len(response.Organisations, 1)
+	s.Require().Len(communities, 1)
+	s.Require().Len(response.Communities, 1)
 	s.Require().Len(response.Chats, 1)
 
 	// The chat should be created
 	createdChat = response.Chats[0]
-	s.Require().Equal(organisation.IDString(), createdChat.OrganisationID)
+	s.Require().Equal(community.IDString(), createdChat.CommunityID)
 	s.Require().Equal(orgChat.Identity.DisplayName, createdChat.Name)
 	s.Require().NotEmpty(createdChat.ID)
-	s.Require().Equal(ChatTypeOrganisationChat, createdChat.ChatType)
+	s.Require().Equal(ChatTypeCommunityChat, createdChat.ChatType)
 	s.Require().True(createdChat.Active)
 	s.Require().NotEmpty(createdChat.Timestamp)
-	s.Require().True(strings.HasPrefix(createdChat.ID, organisation.IDString()))
+	s.Require().True(strings.HasPrefix(createdChat.ID, community.IDString()))
 
 	// We leave the org
-	response, err = s.alice.LeaveOrganisation(organisation.IDString())
+	response, err = s.alice.LeaveCommunity(community.IDString())
 	s.Require().NoError(err)
 	s.Require().NotNil(response)
-	s.Require().Len(response.Organisations, 1)
-	s.Require().False(response.Organisations[0].Joined())
+	s.Require().Len(response.Communities, 1)
+	s.Require().False(response.Communities[0].Joined())
 	s.Require().Len(response.RemovedChats, 2)
 }
 
-func (s *MessengerOrganisationsSuite) TestInviteUserToOrganisation() {
-	description := &protobuf.OrganisationDescription{
-		Permissions: &protobuf.OrganisationPermissions{
-			Access: protobuf.OrganisationPermissions_NO_MEMBERSHIP,
+func (s *MessengerCommunitiesSuite) TestInviteUserToCommunity() {
+	description := &protobuf.CommunityDescription{
+		Permissions: &protobuf.CommunityPermissions{
+			Access: protobuf.CommunityPermissions_NO_MEMBERSHIP,
 		},
 		Identity: &protobuf.ChatIdentity{
 			DisplayName: "status",
-			Description: "status organisation description",
+			Description: "status community description",
 		},
 	}
 
-	// Create an organisation chat
-	response, err := s.bob.CreateOrganisation(description)
+	// Create an community chat
+	response, err := s.bob.CreateCommunity(description)
 	s.Require().NoError(err)
 	s.Require().NotNil(response)
-	s.Require().Len(response.Organisations, 1)
+	s.Require().Len(response.Communities, 1)
 
-	organisation := response.Organisations[0]
+	community := response.Communities[0]
 
-	response, err = s.bob.InviteUserToOrganisation(organisation.IDString(), common.PubkeyToHex(&s.alice.identity.PublicKey))
+	response, err = s.bob.InviteUserToCommunity(community.IDString(), common.PubkeyToHex(&s.alice.identity.PublicKey))
 	s.Require().NoError(err)
 	s.Require().NotNil(response)
-	s.Require().Len(response.Organisations, 1)
+	s.Require().Len(response.Communities, 1)
 
-	organisation = response.Organisations[0]
-	s.Require().True(organisation.HasMember(&s.alice.identity.PublicKey))
+	community = response.Communities[0]
+	s.Require().True(community.HasMember(&s.alice.identity.PublicKey))
 
 	// Pull message and make sure org is received
 	err = tt.RetryWithBackOff(func() error {
@@ -333,65 +333,65 @@ func (s *MessengerOrganisationsSuite) TestInviteUserToOrganisation() {
 		if err != nil {
 			return err
 		}
-		if len(response.Organisations) == 0 {
-			return errors.New("organisation not received")
+		if len(response.Communities) == 0 {
+			return errors.New("community not received")
 		}
 		return nil
 	})
 
 	s.Require().NoError(err)
-	organisations, err := s.alice.Organisations()
+	communities, err := s.alice.Communities()
 	s.Require().NoError(err)
-	s.Require().Len(organisations, 1)
-	s.Require().Len(response.Organisations, 1)
+	s.Require().Len(communities, 1)
+	s.Require().Len(response.Communities, 1)
 
-	organisation = response.Organisations[0]
-	s.Require().True(organisation.HasMember(&s.alice.identity.PublicKey))
+	community = response.Communities[0]
+	s.Require().True(community.HasMember(&s.alice.identity.PublicKey))
 }
 
-func (s *MessengerOrganisationsSuite) TestPostToOrganisationChat() {
-	description := &protobuf.OrganisationDescription{
-		Permissions: &protobuf.OrganisationPermissions{
-			Access: protobuf.OrganisationPermissions_INVITATION_ONLY,
+func (s *MessengerCommunitiesSuite) TestPostToCommunityChat() {
+	description := &protobuf.CommunityDescription{
+		Permissions: &protobuf.CommunityPermissions{
+			Access: protobuf.CommunityPermissions_INVITATION_ONLY,
 		},
 		Identity: &protobuf.ChatIdentity{
 			DisplayName: "status",
-			Description: "status organisation description",
+			Description: "status community description",
 		},
 	}
 
-	// Create an organisation chat
-	response, err := s.bob.CreateOrganisation(description)
+	// Create an community chat
+	response, err := s.bob.CreateCommunity(description)
 	s.Require().NoError(err)
 	s.Require().NotNil(response)
-	s.Require().Len(response.Organisations, 1)
+	s.Require().Len(response.Communities, 1)
 
-	organisation := response.Organisations[0]
+	community := response.Communities[0]
 
 	// Create chat
-	orgChat := &protobuf.OrganisationChat{
-		Permissions: &protobuf.OrganisationPermissions{
-			Access: protobuf.OrganisationPermissions_NO_MEMBERSHIP,
+	orgChat := &protobuf.CommunityChat{
+		Permissions: &protobuf.CommunityPermissions{
+			Access: protobuf.CommunityPermissions_NO_MEMBERSHIP,
 		},
 		Identity: &protobuf.ChatIdentity{
 			DisplayName: "status-core",
-			Description: "status-core organisation chat",
+			Description: "status-core community chat",
 		},
 	}
 
-	response, err = s.bob.CreateOrganisationChat(organisation.IDString(), orgChat)
+	response, err = s.bob.CreateCommunityChat(community.IDString(), orgChat)
 	s.Require().NoError(err)
 	s.Require().NotNil(response)
-	s.Require().Len(response.Organisations, 1)
+	s.Require().Len(response.Communities, 1)
 	s.Require().Len(response.Chats, 1)
 
-	response, err = s.bob.InviteUserToOrganisation(organisation.IDString(), common.PubkeyToHex(&s.alice.identity.PublicKey))
+	response, err = s.bob.InviteUserToCommunity(community.IDString(), common.PubkeyToHex(&s.alice.identity.PublicKey))
 	s.Require().NoError(err)
 	s.Require().NotNil(response)
-	s.Require().Len(response.Organisations, 1)
+	s.Require().Len(response.Communities, 1)
 
-	organisation = response.Organisations[0]
-	s.Require().True(organisation.HasMember(&s.alice.identity.PublicKey))
+	community = response.Communities[0]
+	s.Require().True(community.HasMember(&s.alice.identity.PublicKey))
 
 	// Pull message and make sure org is received
 	err = tt.RetryWithBackOff(func() error {
@@ -399,34 +399,34 @@ func (s *MessengerOrganisationsSuite) TestPostToOrganisationChat() {
 		if err != nil {
 			return err
 		}
-		if len(response.Organisations) == 0 {
-			return errors.New("organisation not received")
+		if len(response.Communities) == 0 {
+			return errors.New("community not received")
 		}
 		return nil
 	})
 
 	s.Require().NoError(err)
-	organisations, err := s.alice.Organisations()
+	communities, err := s.alice.Communities()
 	s.Require().NoError(err)
-	s.Require().Len(organisations, 1)
-	s.Require().Len(response.Organisations, 1)
+	s.Require().Len(communities, 1)
+	s.Require().Len(response.Communities, 1)
 
 	// We join the org
-	response, err = s.alice.JoinOrganisation(organisation.IDString())
+	response, err = s.alice.JoinCommunity(community.IDString())
 	s.Require().NoError(err)
 	s.Require().NotNil(response)
-	s.Require().Len(response.Organisations, 1)
-	s.Require().True(response.Organisations[0].Joined())
+	s.Require().Len(response.Communities, 1)
+	s.Require().True(response.Communities[0].Joined())
 	s.Require().Len(response.Chats, 1)
 	s.Require().Len(response.Filters, 2)
 
 	var orgFilterFound bool
 	var chatFilterFound bool
 	for _, f := range response.Filters {
-		orgFilterFound = orgFilterFound || f.ChatID == response.Organisations[0].IDString()
+		orgFilterFound = orgFilterFound || f.ChatID == response.Communities[0].IDString()
 		chatFilterFound = chatFilterFound || f.ChatID == response.Chats[0].ID
 	}
-	// Make sure an organisation filter has been created
+	// Make sure an community filter has been created
 	s.Require().True(orgFilterFound)
 	// Make sure the chat filter has been created
 	s.Require().True(chatFilterFound)

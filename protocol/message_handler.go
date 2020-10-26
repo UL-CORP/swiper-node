@@ -11,9 +11,10 @@ import (
 	"github.com/status-im/status-go/eth-node/crypto"
 	"github.com/status-im/status-go/eth-node/types"
 	"github.com/status-im/status-go/protocol/common"
+	"github.com/status-im/status-go/protocol/communities"
 	"github.com/status-im/status-go/protocol/encryption/multidevice"
-	"github.com/status-im/status-go/protocol/organisations"
 	"github.com/status-im/status-go/protocol/protobuf"
+	"github.com/status-im/status-go/protocol/transport"
 	v1protocol "github.com/status-im/status-go/protocol/v1"
 )
 
@@ -24,18 +25,20 @@ const (
 )
 
 type MessageHandler struct {
-	identity             *ecdsa.PrivateKey
-	persistence          *sqlitePersistence
-	organisationsManager *organisations.Manager
-	logger               *zap.Logger
+	identity           *ecdsa.PrivateKey
+	persistence        *sqlitePersistence
+	transport          transport.Transport
+	communitiesManager *communities.Manager
+	logger             *zap.Logger
 }
 
-func newMessageHandler(identity *ecdsa.PrivateKey, logger *zap.Logger, persistence *sqlitePersistence, organisationsManager *organisations.Manager) *MessageHandler {
+func newMessageHandler(identity *ecdsa.PrivateKey, logger *zap.Logger, persistence *sqlitePersistence, communitiesManager *communities.Manager, transport transport.Transport) *MessageHandler {
 	return &MessageHandler{
-		identity:             identity,
-		persistence:          persistence,
-		organisationsManager: organisationsManager,
-		logger:               logger}
+		identity:           identity,
+		persistence:        persistence,
+		communitiesManager: communitiesManager,
+		transport:          transport,
+		logger:             logger}
 }
 
 // HandleMembershipUpdate updates a Chat instance according to the membership updates.
@@ -327,29 +330,32 @@ func (m *MessageHandler) HandlePairInstallation(state *ReceivedMessageState, mes
 	return nil
 }
 
-// HandleOrganisationDescription handles an organisation description
-func (m *MessageHandler) HandleOrganisationDescription(state *ReceivedMessageState, signer *ecdsa.PublicKey, description protobuf.OrganisationDescription, rawPayload []byte) error {
-	organisation, err := m.organisationsManager.HandleOrganisationDescriptionMessage(signer, &description, rawPayload)
+// HandleCommunityDescription handles an community description
+func (m *MessageHandler) HandleCommunityDescription(state *ReceivedMessageState, signer *ecdsa.PublicKey, description protobuf.CommunityDescription, rawPayload []byte) error {
+	community, err := m.communitiesManager.HandleCommunityDescriptionMessage(signer, &description, rawPayload)
 	if err != nil {
 		return err
 	}
-	state.Response.Organisations = append(state.Response.Organisations, organisation)
+	state.Response.Communities = append(state.Response.Communities, community)
 
 	// If we haven't joined the org, nothing to do
-	if !organisation.Joined() {
+	if !community.Joined() {
 		return nil
 	}
 
 	// Update relevant chats names and add new ones
 	// Currently removal is not supported
-	chats := CreateOrganisationChats(organisation, state.Timesource)
+	chats := CreateCommunityChats(community, state.Timesource)
+	var chatIDs []string
 	for i, chat := range chats {
 
 		oldChat, ok := state.AllChats[chat.ID]
 		if !ok {
 			// Beware, don't use the reference in the range (i.e chat) as it's a shallow copy
 			state.AllChats[chat.ID] = &chats[i]
+
 			state.ModifiedChats[chat.ID] = true
+			chatIDs = append(chatIDs, chat.ID)
 			// Update name, currently is the only field is mutable
 		} else if oldChat.Name != chat.Name {
 			state.AllChats[chat.ID].Name = chat.Name
@@ -357,11 +363,19 @@ func (m *MessageHandler) HandleOrganisationDescription(state *ReceivedMessageSta
 		}
 	}
 
+	// Load transport filters
+	filters, err := m.transport.InitPublicFilters(chatIDs)
+	if err != nil {
+		return err
+	}
+
+	state.Response.Filters = filters
+
 	return nil
 }
 
-// HandleOrganisationInvitation handles an organisation invitation
-func (m *MessageHandler) HandleOrganisationInvitation(state *ReceivedMessageState, signer *ecdsa.PublicKey, invitation protobuf.OrganisationInvitation, rawPayload []byte) error {
+// HandleCommunityInvitation handles an community invitation
+func (m *MessageHandler) HandleCommunityInvitation(state *ReceivedMessageState, signer *ecdsa.PublicKey, invitation protobuf.CommunityInvitation, rawPayload []byte) error {
 	if invitation.PublicKey == nil {
 		return errors.New("invalid pubkey")
 	}
@@ -374,18 +388,18 @@ func (m *MessageHandler) HandleOrganisationInvitation(state *ReceivedMessageStat
 		return errors.New("invitation not for us")
 	}
 
-	org, err := m.organisationsManager.HandleOrganisationInvitation(signer, &invitation, rawPayload)
+	org, err := m.communitiesManager.HandleCommunityInvitation(signer, &invitation, rawPayload)
 	if err != nil {
 		return err
 	}
-	state.Response.Organisations = append(state.Response.Organisations, org)
+	state.Response.Communities = append(state.Response.Communities, org)
 
 	return nil
 }
 
-// HandleWrappedOrganisationDescriptionMessage handles a wrapped organisation description
-func (m *MessageHandler) HandleWrappedOrganisationDescriptionMessage(state *ReceivedMessageState, payload []byte) (*organisations.Organisation, error) {
-	return m.organisationsManager.HandleWrappedOrganisationDescriptionMessage(payload)
+// HandleWrappedCommunityDescriptionMessage handles a wrapped community description
+func (m *MessageHandler) HandleWrappedCommunityDescriptionMessage(state *ReceivedMessageState, payload []byte) (*communities.Community, error) {
+	return m.communitiesManager.HandleWrappedCommunityDescriptionMessage(payload)
 }
 
 func (m *MessageHandler) HandleChatMessage(state *ReceivedMessageState) error {
@@ -459,15 +473,15 @@ func (m *MessageHandler) HandleChatMessage(state *ReceivedMessageState) error {
 		state.AllContacts[contact.ID] = contact
 	}
 
-	if receivedMessage.ContentType == protobuf.ChatMessage_ORGANISATION {
-		m.logger.Debug("Handling organisation content type")
+	if receivedMessage.ContentType == protobuf.ChatMessage_COMMUNITY {
+		m.logger.Debug("Handling community content type")
 
-		organisation, err := m.HandleWrappedOrganisationDescriptionMessage(state, receivedMessage.GetOrganisation())
+		community, err := m.HandleWrappedCommunityDescriptionMessage(state, receivedMessage.GetCommunity())
 		if err != nil {
 			return err
 		}
-		receivedMessage.OrganisationID = organisation.IDString()
-		state.Response.Organisations = append(state.Response.Organisations, organisation)
+		receivedMessage.CommunityID = community.IDString()
+		state.Response.Communities = append(state.Response.Communities, community)
 	}
 	// Add to response
 	state.Response.Messages = append(state.Response.Messages, receivedMessage)
@@ -726,18 +740,18 @@ func (m *MessageHandler) matchChatEntity(chatEntity common.ChatEntity, chats map
 			chat = &newChat
 		}
 		return chat, nil
-	case chatEntity.GetMessageType() == protobuf.MessageType_ORGANISATION_CHAT:
+	case chatEntity.GetMessageType() == protobuf.MessageType_COMMUNITY_CHAT:
 		chatID := chatEntity.GetChatId()
 		chat := chats[chatID]
 		if chat == nil {
-			return nil, errors.New("received organisation chat chatEntity for non-existing chat")
+			return nil, errors.New("received community chat chatEntity for non-existing chat")
 		}
 
-		if chat.OrganisationID == "" || chat.ChatType != ChatTypeOrganisationChat {
-			return nil, errors.New("not an organisation chat")
+		if chat.CommunityID == "" || chat.ChatType != ChatTypeCommunityChat {
+			return nil, errors.New("not an community chat")
 		}
 
-		canPost, err := m.organisationsManager.CanPost(chatEntity.GetSigPubKey(), chat.OrganisationID, chat.OrganisationChatID(), chatEntity.GetGrant())
+		canPost, err := m.communitiesManager.CanPost(chatEntity.GetSigPubKey(), chat.CommunityID, chat.CommunityChatID(), chatEntity.GetGrant())
 		if err != nil {
 			return nil, err
 		}

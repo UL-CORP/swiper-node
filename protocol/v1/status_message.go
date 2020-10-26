@@ -244,10 +244,10 @@ func (m *StatusMessage) HandleApplication() error {
 		return m.unmarshalProtobufData(new(protobuf.EmojiReaction))
 	case protobuf.ApplicationMetadataMessage_GROUP_CHAT_INVITATION:
 		return m.unmarshalProtobufData(new(protobuf.GroupChatInvitation))
-	case protobuf.ApplicationMetadataMessage_ORGANISATION_DESCRIPTION:
-		return m.unmarshalProtobufData(new(protobuf.OrganisationDescription))
-	case protobuf.ApplicationMetadataMessage_ORGANISATION_INVITATION:
-		return m.unmarshalProtobufData(new(protobuf.OrganisationInvitation))
+	case protobuf.ApplicationMetadataMessage_COMMUNITY_DESCRIPTION:
+		return m.unmarshalProtobufData(new(protobuf.CommunityDescription))
+	case protobuf.ApplicationMetadataMessage_COMMUNITY_INVITATION:
+		return m.unmarshalProtobufData(new(protobuf.CommunityInvitation))
 	case protobuf.ApplicationMetadataMessage_PUSH_NOTIFICATION_REGISTRATION:
 		// This message is a bit different as it's encrypted, so we pass it straight through
 		v := reflect.ValueOf(m.UnwrappedPayload)

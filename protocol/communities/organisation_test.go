@@ -1,4 +1,4 @@
-package organisations
+package communities
 
 import (
 	"crypto/ecdsa"
@@ -12,18 +12,18 @@ import (
 	"github.com/status-im/status-go/protocol/protobuf"
 )
 
-func TestOrganisationSuite(t *testing.T) {
-	suite.Run(t, new(OrganisationSuite))
+func TestCommunitySuite(t *testing.T) {
+	suite.Run(t, new(CommunitySuite))
 }
 
 const testChatID1 = "chat-id-1"
 const testChatID2 = "chat-id-2"
 
-type OrganisationSuite struct {
+type CommunitySuite struct {
 	suite.Suite
 
 	identity       *ecdsa.PrivateKey
-	organisationID []byte
+	communityID []byte
 
 	member1 *ecdsa.PrivateKey
 	member2 *ecdsa.PrivateKey
@@ -34,11 +34,11 @@ type OrganisationSuite struct {
 	member3Key string
 }
 
-func (s *OrganisationSuite) SetupTest() {
+func (s *CommunitySuite) SetupTest() {
 	identity, err := crypto.GenerateKey()
 	s.Require().NoError(err)
 	s.identity = identity
-	s.organisationID = crypto.CompressPubkey(&identity.PublicKey)
+	s.communityID = crypto.CompressPubkey(&identity.PublicKey)
 
 	member1, err := crypto.GenerateKey()
 	s.Require().NoError(err)
@@ -58,17 +58,17 @@ func (s *OrganisationSuite) SetupTest() {
 
 }
 
-func (s *OrganisationSuite) TestInviteUserToOrg() {
+func (s *CommunitySuite) TestInviteUserToOrg() {
 	newMember, err := crypto.GenerateKey()
 	s.Require().NoError(err)
 
-	org := s.buildOrganisation(&s.identity.PublicKey)
+	org := s.buildCommunity(&s.identity.PublicKey)
 	org.config.PrivateKey = nil
 	// Not an admin
 	_, err = org.InviteUserToOrg(&s.member2.PublicKey)
 	s.Require().Equal(ErrNotAdmin, err)
 
-	// Add admin to organisation
+	// Add admin to community
 	org.config.PrivateKey = s.identity
 
 	response, err := org.InviteUserToOrg(&newMember.PublicKey)
@@ -79,12 +79,12 @@ func (s *OrganisationSuite) TestInviteUserToOrg() {
 	s.Require().True(org.HasMember(&newMember.PublicKey))
 
 	// Check member has been added to response
-	s.Require().NotNil(response.OrganisationDescription)
+	s.Require().NotNil(response.CommunityDescription)
 
 	metadata := &protobuf.ApplicationMetadataMessage{}
-	description := &protobuf.OrganisationDescription{}
+	description := &protobuf.CommunityDescription{}
 
-	s.Require().NoError(proto.Unmarshal(response.OrganisationDescription, metadata))
+	s.Require().NoError(proto.Unmarshal(response.CommunityDescription, metadata))
 	s.Require().NoError(proto.Unmarshal(metadata.Payload, description))
 
 	_, ok := description.Members[common.PubkeyToHex(&newMember.PublicKey)]
@@ -99,20 +99,20 @@ func (s *OrganisationSuite) TestInviteUserToOrg() {
 	s.Require().NotNil(grant)
 }
 
-func (s *OrganisationSuite) TestCreateChat() {
+func (s *CommunitySuite) TestCreateChat() {
 	newChatID := "new-chat-id"
-	org := s.buildOrganisation(&s.identity.PublicKey)
+	org := s.buildCommunity(&s.identity.PublicKey)
 	org.config.PrivateKey = nil
 
 	identity := &protobuf.ChatIdentity{
 		DisplayName: "new-chat-display-name",
 		Description: "new-chat-description",
 	}
-	permissions := &protobuf.OrganisationPermissions{
-		Access: protobuf.OrganisationPermissions_NO_MEMBERSHIP,
+	permissions := &protobuf.CommunityPermissions{
+		Access: protobuf.CommunityPermissions_NO_MEMBERSHIP,
 	}
 
-	_, err := org.CreateChat(newChatID, &protobuf.OrganisationChat{
+	_, err := org.CreateChat(newChatID, &protobuf.CommunityChat{
 		Identity:    identity,
 		Permissions: permissions,
 	})
@@ -121,12 +121,12 @@ func (s *OrganisationSuite) TestCreateChat() {
 
 	org.config.PrivateKey = s.identity
 
-	changes, err := org.CreateChat(newChatID, &protobuf.OrganisationChat{
+	changes, err := org.CreateChat(newChatID, &protobuf.CommunityChat{
 		Identity:    identity,
 		Permissions: permissions,
 	})
 
-	description := org.config.OrganisationDescription
+	description := org.config.CommunityDescription
 
 	s.Require().NoError(err)
 	s.Require().NotNil(description)
@@ -140,8 +140,8 @@ func (s *OrganisationSuite) TestCreateChat() {
 	s.Require().NotNil(changes.ChatsAdded[newChatID])
 }
 
-func (s *OrganisationSuite) TestDeleteChat() {
-	org := s.buildOrganisation(&s.identity.PublicKey)
+func (s *CommunitySuite) TestDeleteChat() {
+	org := s.buildCommunity(&s.identity.PublicKey)
 	org.config.PrivateKey = nil
 
 	_, err := org.DeleteChat(testChatID1)
@@ -157,17 +157,17 @@ func (s *OrganisationSuite) TestDeleteChat() {
 	s.Require().Equal(uint64(2), description.Clock)
 }
 
-func (s *OrganisationSuite) TestInviteUserToChat() {
+func (s *CommunitySuite) TestInviteUserToChat() {
 	newMember, err := crypto.GenerateKey()
 	s.Require().NoError(err)
 
-	org := s.buildOrganisation(&s.identity.PublicKey)
+	org := s.buildCommunity(&s.identity.PublicKey)
 	org.config.PrivateKey = nil
 	// Not an admin
 	_, err = org.InviteUserToChat(&s.member2.PublicKey, testChatID1)
 	s.Require().Equal(ErrNotAdmin, err)
 
-	// Add admin to organisation
+	// Add admin to community
 	org.config.PrivateKey = s.identity
 
 	response, err := org.InviteUserToChat(&newMember.PublicKey, testChatID1)
@@ -179,12 +179,12 @@ func (s *OrganisationSuite) TestInviteUserToChat() {
 	s.Require().True(org.IsMemberInChat(&newMember.PublicKey, testChatID1))
 
 	// Check member has been added to response
-	s.Require().NotNil(response.OrganisationDescription)
+	s.Require().NotNil(response.CommunityDescription)
 
 	metadata := &protobuf.ApplicationMetadataMessage{}
-	description := &protobuf.OrganisationDescription{}
+	description := &protobuf.CommunityDescription{}
 
-	s.Require().NoError(proto.Unmarshal(response.OrganisationDescription, metadata))
+	s.Require().NoError(proto.Unmarshal(response.CommunityDescription, metadata))
 	s.Require().NoError(proto.Unmarshal(metadata.Payload, description))
 
 	_, ok := description.Members[common.PubkeyToHex(&newMember.PublicKey)]
@@ -205,96 +205,96 @@ func (s *OrganisationSuite) TestInviteUserToChat() {
 	s.Require().Equal(testChatID1, grant.ChatId)
 }
 
-func (s *OrganisationSuite) TestRemoveUserFromChat() {
-	org := s.buildOrganisation(&s.identity.PublicKey)
+func (s *CommunitySuite) TestRemoveUserFromChat() {
+	org := s.buildCommunity(&s.identity.PublicKey)
 	org.config.PrivateKey = nil
 	// Not an admin
 	_, err := org.RemoveUserFromOrg(&s.member1.PublicKey)
 	s.Require().Equal(ErrNotAdmin, err)
 
-	// Add admin to organisation
+	// Add admin to community
 	org.config.PrivateKey = s.identity
 
-	actualOrganisation, err := org.RemoveUserFromChat(&s.member1.PublicKey, testChatID1)
+	actualCommunity, err := org.RemoveUserFromChat(&s.member1.PublicKey, testChatID1)
 	s.Require().Nil(err)
-	s.Require().NotNil(actualOrganisation)
+	s.Require().NotNil(actualCommunity)
 
 	// Check member has not been removed
 	s.Require().True(org.HasMember(&s.member1.PublicKey))
 
 	// Check member has not been removed from org
-	_, ok := actualOrganisation.Members[common.PubkeyToHex(&s.member1.PublicKey)]
+	_, ok := actualCommunity.Members[common.PubkeyToHex(&s.member1.PublicKey)]
 	s.Require().True(ok)
 
 	// Check member has been removed from chat
-	_, ok = actualOrganisation.Chats[testChatID1].Members[common.PubkeyToHex(&s.member1.PublicKey)]
+	_, ok = actualCommunity.Chats[testChatID1].Members[common.PubkeyToHex(&s.member1.PublicKey)]
 	s.Require().False(ok)
 }
 
-func (s *OrganisationSuite) TestRemoveUserFormOrg() {
-	org := s.buildOrganisation(&s.identity.PublicKey)
+func (s *CommunitySuite) TestRemoveUserFormOrg() {
+	org := s.buildCommunity(&s.identity.PublicKey)
 	org.config.PrivateKey = nil
 	// Not an admin
 	_, err := org.RemoveUserFromOrg(&s.member1.PublicKey)
 	s.Require().Equal(ErrNotAdmin, err)
 
-	// Add admin to organisation
+	// Add admin to community
 	org.config.PrivateKey = s.identity
 
-	actualOrganisation, err := org.RemoveUserFromOrg(&s.member1.PublicKey)
+	actualCommunity, err := org.RemoveUserFromOrg(&s.member1.PublicKey)
 	s.Require().Nil(err)
-	s.Require().NotNil(actualOrganisation)
+	s.Require().NotNil(actualCommunity)
 
 	// Check member has been removed
 	s.Require().False(org.HasMember(&s.member1.PublicKey))
 
 	// Check member has been removed from org
-	_, ok := actualOrganisation.Members[common.PubkeyToHex(&s.member1.PublicKey)]
+	_, ok := actualCommunity.Members[common.PubkeyToHex(&s.member1.PublicKey)]
 	s.Require().False(ok)
 
 	// Check member has been removed from chat
-	_, ok = actualOrganisation.Chats[testChatID1].Members[common.PubkeyToHex(&s.member1.PublicKey)]
+	_, ok = actualCommunity.Chats[testChatID1].Members[common.PubkeyToHex(&s.member1.PublicKey)]
 	s.Require().False(ok)
 }
 
-func (s *OrganisationSuite) TestAcceptRequestToJoin() {
+func (s *CommunitySuite) TestAcceptRequestToJoin() {
 	// WHAT TO DO WITH ENS
 	// TEST CASE 1: Not an admin
 	// TEST CASE 2: No request to join
 	// TEST CASE 3: Valid
 }
 
-func (s *OrganisationSuite) TestDeclineRequestToJoin() {
+func (s *CommunitySuite) TestDeclineRequestToJoin() {
 	// TEST CASE 1: Not an admin
 	// TEST CASE 2: No request to join
 	// TEST CASE 3: Valid
 }
 
-func (s *OrganisationSuite) TestHandleRequestJoin() {
-	description := &protobuf.OrganisationDescription{}
+func (s *CommunitySuite) TestHandleRequestJoin() {
+	description := &protobuf.CommunityDescription{}
 
 	key, err := crypto.GenerateKey()
 	s.Require().NoError(err)
 
 	signer := &key.PublicKey
 
-	request := &protobuf.OrganisationRequestJoin{
+	request := &protobuf.CommunityRequestJoin{
 		EnsName:        "donvanvliet.stateofus.eth",
-		OrganisationId: s.organisationID,
+		CommunityId: s.communityID,
 	}
 
-	requestWithChatID := &protobuf.OrganisationRequestJoin{
+	requestWithChatID := &protobuf.CommunityRequestJoin{
 		EnsName:        "donvanvliet.stateofus.eth",
-		OrganisationId: s.organisationID,
+		CommunityId: s.communityID,
 		ChatId:         testChatID1,
 	}
 
-	requestWithoutENS := &protobuf.OrganisationRequestJoin{
-		OrganisationId: s.organisationID,
+	requestWithoutENS := &protobuf.CommunityRequestJoin{
+		CommunityId: s.communityID,
 	}
 
-	requestWithChatWithoutENS := &protobuf.OrganisationRequestJoin{
-		OrganisationId: s.organisationID,
+	requestWithChatWithoutENS := &protobuf.CommunityRequestJoin{
+		CommunityId: s.communityID,
 		ChatId:         testChatID1,
 	}
 
@@ -312,12 +312,12 @@ func (s *OrganisationSuite) TestHandleRequestJoin() {
 	testCases := []struct {
 		name    string
 		config  Config
-		request *protobuf.OrganisationRequestJoin
+		request *protobuf.CommunityRequestJoin
 		signer  *ecdsa.PublicKey
 		err     error
 	}{
 		{
-			name:    "on-request access to organisation",
+			name:    "on-request access to community",
 			config:  s.configOnRequest(),
 			signer:  signer,
 			request: request,
@@ -325,7 +325,7 @@ func (s *OrganisationSuite) TestHandleRequestJoin() {
 		},
 		{
 			name:    "not admin",
-			config:  Config{OrganisationDescription: description},
+			config:  Config{CommunityDescription: description},
 			signer:  signer,
 			request: request,
 			err:     ErrNotAdmin,
@@ -426,7 +426,7 @@ func (s *OrganisationSuite) TestHandleRequestJoin() {
 	}
 }
 
-func (s *OrganisationSuite) TestCanPost() {
+func (s *CommunitySuite) TestCanPost() {
 	validGrant := 1
 	invalidGrant := 2
 
@@ -523,7 +523,7 @@ func (s *OrganisationSuite) TestCanPost() {
 				grant, err = org.buildGrant(tc.member, testChatID1)
 				// We lower the clock of the description to simulate
 				// a valid use case
-				org.config.OrganisationDescription.Clock--
+				org.config.CommunityDescription.Clock--
 				s.Require().NoError(err)
 			} else if tc.grant == invalidGrant {
 				grant, err = org.buildGrant(&s.member2.PublicKey, testChatID1)
@@ -536,7 +536,7 @@ func (s *OrganisationSuite) TestCanPost() {
 	}
 }
 
-func (s *OrganisationSuite) TestHandleOrganisationDescription() {
+func (s *CommunitySuite) TestHandleCommunityDescription() {
 	key, err := crypto.GenerateKey()
 	s.Require().NoError(err)
 
@@ -544,37 +544,37 @@ func (s *OrganisationSuite) TestHandleOrganisationDescription() {
 
 	testCases := []struct {
 		name        string
-		description func(*Organisation) *protobuf.OrganisationDescription
-		changes     func(*Organisation) *OrganisationChanges
+		description func(*Community) *protobuf.CommunityDescription
+		changes     func(*Community) *CommunityChanges
 		signer      *ecdsa.PublicKey
 		err         error
 	}{
 		{
 			name:        "updated version but no changes",
-			description: s.identicalOrganisationDescription,
+			description: s.identicalCommunityDescription,
 			signer:      signer,
-			changes:     func(_ *Organisation) *OrganisationChanges { return emptyOrganisationChanges() },
+			changes:     func(_ *Community) *CommunityChanges { return emptyCommunityChanges() },
 			err:         nil,
 		},
 		{
 			name:        "updated version but lower clock",
-			description: s.oldOrganisationDescription,
+			description: s.oldCommunityDescription,
 			signer:      signer,
-			changes:     func(_ *Organisation) *OrganisationChanges { return emptyOrganisationChanges() },
+			changes:     func(_ *Community) *CommunityChanges { return emptyCommunityChanges() },
 			err:         nil,
 		},
 		{
 			name:        "removed member from org",
-			description: s.removedMemberOrganisationDescription,
+			description: s.removedMemberCommunityDescription,
 			signer:      signer,
-			changes: func(org *Organisation) *OrganisationChanges {
-				changes := emptyOrganisationChanges()
-				changes.MembersRemoved[s.member1Key] = &protobuf.OrganisationMember{}
-				changes.ChatsModified[testChatID1] = &OrganisationChatChanges{
-					MembersAdded:   make(map[string]*protobuf.OrganisationMember),
-					MembersRemoved: make(map[string]*protobuf.OrganisationMember),
+			changes: func(org *Community) *CommunityChanges {
+				changes := emptyCommunityChanges()
+				changes.MembersRemoved[s.member1Key] = &protobuf.CommunityMember{}
+				changes.ChatsModified[testChatID1] = &CommunityChatChanges{
+					MembersAdded:   make(map[string]*protobuf.CommunityMember),
+					MembersRemoved: make(map[string]*protobuf.CommunityMember),
 				}
-				changes.ChatsModified[testChatID1].MembersRemoved[s.member1Key] = &protobuf.OrganisationMember{}
+				changes.ChatsModified[testChatID1].MembersRemoved[s.member1Key] = &protobuf.CommunityMember{}
 
 				return changes
 			},
@@ -582,16 +582,16 @@ func (s *OrganisationSuite) TestHandleOrganisationDescription() {
 		},
 		{
 			name:        "added member from org",
-			description: s.addedMemberOrganisationDescription,
+			description: s.addedMemberCommunityDescription,
 			signer:      signer,
-			changes: func(org *Organisation) *OrganisationChanges {
-				changes := emptyOrganisationChanges()
-				changes.MembersAdded[s.member3Key] = &protobuf.OrganisationMember{}
-				changes.ChatsModified[testChatID1] = &OrganisationChatChanges{
-					MembersAdded:   make(map[string]*protobuf.OrganisationMember),
-					MembersRemoved: make(map[string]*protobuf.OrganisationMember),
+			changes: func(org *Community) *CommunityChanges {
+				changes := emptyCommunityChanges()
+				changes.MembersAdded[s.member3Key] = &protobuf.CommunityMember{}
+				changes.ChatsModified[testChatID1] = &CommunityChatChanges{
+					MembersAdded:   make(map[string]*protobuf.CommunityMember),
+					MembersRemoved: make(map[string]*protobuf.CommunityMember),
 				}
-				changes.ChatsModified[testChatID1].MembersAdded[s.member3Key] = &protobuf.OrganisationMember{}
+				changes.ChatsModified[testChatID1].MembersAdded[s.member3Key] = &protobuf.CommunityMember{}
 
 				return changes
 			},
@@ -599,13 +599,13 @@ func (s *OrganisationSuite) TestHandleOrganisationDescription() {
 		},
 		{
 			name:        "chat added to org",
-			description: s.addedChatOrganisationDescription,
+			description: s.addedChatCommunityDescription,
 			signer:      signer,
-			changes: func(org *Organisation) *OrganisationChanges {
-				changes := emptyOrganisationChanges()
-				changes.MembersAdded[s.member3Key] = &protobuf.OrganisationMember{}
-				changes.ChatsAdded[testChatID2] = &protobuf.OrganisationChat{Permissions: &protobuf.OrganisationPermissions{Access: protobuf.OrganisationPermissions_INVITATION_ONLY}, Members: make(map[string]*protobuf.OrganisationMember)}
-				changes.ChatsAdded[testChatID2].Members[s.member3Key] = &protobuf.OrganisationMember{}
+			changes: func(org *Community) *CommunityChanges {
+				changes := emptyCommunityChanges()
+				changes.MembersAdded[s.member3Key] = &protobuf.CommunityMember{}
+				changes.ChatsAdded[testChatID2] = &protobuf.CommunityChat{Permissions: &protobuf.CommunityPermissions{Access: protobuf.CommunityPermissions_INVITATION_ONLY}, Members: make(map[string]*protobuf.CommunityMember)}
+				changes.ChatsAdded[testChatID2].Members[s.member3Key] = &protobuf.CommunityMember{}
 
 				return changes
 			},
@@ -613,11 +613,11 @@ func (s *OrganisationSuite) TestHandleOrganisationDescription() {
 		},
 		{
 			name:        "chat removed from the org",
-			description: s.removedChatOrganisationDescription,
+			description: s.removedChatCommunityDescription,
 			signer:      signer,
-			changes: func(org *Organisation) *OrganisationChanges {
-				changes := emptyOrganisationChanges()
-				changes.ChatsRemoved[testChatID1] = org.config.OrganisationDescription.Chats[testChatID1]
+			changes: func(org *Community) *CommunityChanges {
+				changes := emptyCommunityChanges()
+				changes.ChatsRemoved[testChatID1] = org.config.CommunityDescription.Chats[testChatID1]
 
 				return changes
 			},
@@ -627,333 +627,333 @@ func (s *OrganisationSuite) TestHandleOrganisationDescription() {
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			org := s.buildOrganisation(signer)
+			org := s.buildCommunity(signer)
 			org.Join()
 			expectedChanges := tc.changes(org)
-			actualChanges, err := org.HandleOrganisationDescription(tc.signer, tc.description(org), []byte{0x01})
+			actualChanges, err := org.HandleCommunityDescription(tc.signer, tc.description(org), []byte{0x01})
 			s.Require().Equal(tc.err, err)
 			s.Require().Equal(expectedChanges, actualChanges)
 		})
 	}
 }
 
-func (s *OrganisationSuite) TestValidateOrganisationDescription() {
+func (s *CommunitySuite) TestValidateCommunityDescription() {
 
 	testCases := []struct {
 		name        string
-		description *protobuf.OrganisationDescription
+		description *protobuf.CommunityDescription
 		err         error
 	}{
 		{
 			name:        "valid",
-			description: s.buildOrganisationDescription(),
+			description: s.buildCommunityDescription(),
 			err:         nil,
 		},
 		{
 			name: "empty description",
-			err:  ErrInvalidOrganisationDescription,
+			err:  ErrInvalidCommunityDescription,
 		},
 		{
 			name:        "empty org permissions",
-			description: s.emptyPermissionsOrganisationDescription(),
-			err:         ErrInvalidOrganisationDescriptionNoOrgPermissions,
+			description: s.emptyPermissionsCommunityDescription(),
+			err:         ErrInvalidCommunityDescriptionNoOrgPermissions,
 		},
 		{
 			name:        "empty chat permissions",
-			description: s.emptyChatPermissionsOrganisationDescription(),
-			err:         ErrInvalidOrganisationDescriptionNoChatPermissions,
+			description: s.emptyChatPermissionsCommunityDescription(),
+			err:         ErrInvalidCommunityDescriptionNoChatPermissions,
 		},
 		{
 			name:        "unknown org permissions",
-			description: s.unknownOrgPermissionsOrganisationDescription(),
-			err:         ErrInvalidOrganisationDescriptionUnknownOrgAccess,
+			description: s.unknownOrgPermissionsCommunityDescription(),
+			err:         ErrInvalidCommunityDescriptionUnknownOrgAccess,
 		},
 		{
 			name:        "unknown chat permissions",
-			description: s.unknownChatPermissionsOrganisationDescription(),
-			err:         ErrInvalidOrganisationDescriptionUnknownChatAccess,
+			description: s.unknownChatPermissionsCommunityDescription(),
+			err:         ErrInvalidCommunityDescriptionUnknownChatAccess,
 		},
 		{
 			name:        "member in chat but not in org",
-			description: s.memberInChatNotInOrgOrganisationDescription(),
-			err:         ErrInvalidOrganisationDescriptionMemberInChatButNotInOrg,
+			description: s.memberInChatNotInOrgCommunityDescription(),
+			err:         ErrInvalidCommunityDescriptionMemberInChatButNotInOrg,
 		},
 	}
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			err := ValidateOrganisationDescription(tc.description)
+			err := ValidateCommunityDescription(tc.description)
 			s.Require().Equal(tc.err, err)
 		})
 	}
 }
 
-func (s *OrganisationSuite) emptyOrganisationDescription() *protobuf.OrganisationDescription {
-	return &protobuf.OrganisationDescription{
-		Permissions: &protobuf.OrganisationPermissions{},
+func (s *CommunitySuite) emptyCommunityDescription() *protobuf.CommunityDescription {
+	return &protobuf.CommunityDescription{
+		Permissions: &protobuf.CommunityPermissions{},
 	}
 
 }
 
-func (s *OrganisationSuite) emptyOrganisationDescriptionWithChat() *protobuf.OrganisationDescription {
-	desc := &protobuf.OrganisationDescription{
-		Members:     make(map[string]*protobuf.OrganisationMember),
+func (s *CommunitySuite) emptyCommunityDescriptionWithChat() *protobuf.CommunityDescription {
+	desc := &protobuf.CommunityDescription{
+		Members:     make(map[string]*protobuf.CommunityMember),
 		Clock:       1,
-		Chats:       make(map[string]*protobuf.OrganisationChat),
-		Permissions: &protobuf.OrganisationPermissions{},
+		Chats:       make(map[string]*protobuf.CommunityChat),
+		Permissions: &protobuf.CommunityPermissions{},
 	}
 
-	desc.Chats[testChatID1] = &protobuf.OrganisationChat{Permissions: &protobuf.OrganisationPermissions{}, Members: make(map[string]*protobuf.OrganisationMember)}
-	desc.Members[common.PubkeyToHex(&s.member1.PublicKey)] = &protobuf.OrganisationMember{}
-	desc.Chats[testChatID1].Members[common.PubkeyToHex(&s.member1.PublicKey)] = &protobuf.OrganisationMember{}
+	desc.Chats[testChatID1] = &protobuf.CommunityChat{Permissions: &protobuf.CommunityPermissions{}, Members: make(map[string]*protobuf.CommunityMember)}
+	desc.Members[common.PubkeyToHex(&s.member1.PublicKey)] = &protobuf.CommunityMember{}
+	desc.Chats[testChatID1].Members[common.PubkeyToHex(&s.member1.PublicKey)] = &protobuf.CommunityMember{}
 
 	return desc
 
 }
 
-func (s *OrganisationSuite) configOnRequest() Config {
-	description := s.emptyOrganisationDescription()
-	description.Permissions.Access = protobuf.OrganisationPermissions_ON_REQUEST
+func (s *CommunitySuite) configOnRequest() Config {
+	description := s.emptyCommunityDescription()
+	description.Permissions.Access = protobuf.CommunityPermissions_ON_REQUEST
 	return Config{
 		ID:                      &s.identity.PublicKey,
-		OrganisationDescription: description,
+		CommunityDescription: description,
 		PrivateKey:              s.identity,
 	}
 }
 
-func (s *OrganisationSuite) configInvitationOnly() Config {
-	description := s.emptyOrganisationDescription()
-	description.Permissions.Access = protobuf.OrganisationPermissions_INVITATION_ONLY
+func (s *CommunitySuite) configInvitationOnly() Config {
+	description := s.emptyCommunityDescription()
+	description.Permissions.Access = protobuf.CommunityPermissions_INVITATION_ONLY
 	return Config{
 		ID:                      &s.identity.PublicKey,
-		OrganisationDescription: description,
+		CommunityDescription: description,
 		PrivateKey:              s.identity,
 	}
 }
 
-func (s *OrganisationSuite) configNoMembershipOrgNoMembershipChat() Config {
-	description := s.emptyOrganisationDescriptionWithChat()
-	description.Permissions.Access = protobuf.OrganisationPermissions_NO_MEMBERSHIP
-	description.Chats[testChatID1].Permissions.Access = protobuf.OrganisationPermissions_NO_MEMBERSHIP
+func (s *CommunitySuite) configNoMembershipOrgNoMembershipChat() Config {
+	description := s.emptyCommunityDescriptionWithChat()
+	description.Permissions.Access = protobuf.CommunityPermissions_NO_MEMBERSHIP
+	description.Chats[testChatID1].Permissions.Access = protobuf.CommunityPermissions_NO_MEMBERSHIP
 	return Config{
 		ID:                      &s.identity.PublicKey,
-		OrganisationDescription: description,
+		CommunityDescription: description,
 		PrivateKey:              s.identity,
 	}
 
 }
 
-func (s *OrganisationSuite) configNoMembershipOrgInvitationOnlyChat() Config {
-	description := s.emptyOrganisationDescriptionWithChat()
-	description.Permissions.Access = protobuf.OrganisationPermissions_NO_MEMBERSHIP
-	description.Chats[testChatID1].Permissions.Access = protobuf.OrganisationPermissions_INVITATION_ONLY
+func (s *CommunitySuite) configNoMembershipOrgInvitationOnlyChat() Config {
+	description := s.emptyCommunityDescriptionWithChat()
+	description.Permissions.Access = protobuf.CommunityPermissions_NO_MEMBERSHIP
+	description.Chats[testChatID1].Permissions.Access = protobuf.CommunityPermissions_INVITATION_ONLY
 	return Config{
 		ID:                      &s.identity.PublicKey,
-		OrganisationDescription: description,
+		CommunityDescription: description,
 		PrivateKey:              s.identity,
 	}
 }
 
-func (s *OrganisationSuite) configInvitationOnlyOrgInvitationOnlyChat() Config {
-	description := s.emptyOrganisationDescriptionWithChat()
-	description.Permissions.Access = protobuf.OrganisationPermissions_INVITATION_ONLY
-	description.Chats[testChatID1].Permissions.Access = protobuf.OrganisationPermissions_INVITATION_ONLY
+func (s *CommunitySuite) configInvitationOnlyOrgInvitationOnlyChat() Config {
+	description := s.emptyCommunityDescriptionWithChat()
+	description.Permissions.Access = protobuf.CommunityPermissions_INVITATION_ONLY
+	description.Chats[testChatID1].Permissions.Access = protobuf.CommunityPermissions_INVITATION_ONLY
 	return Config{
 		ID:                      &s.identity.PublicKey,
-		OrganisationDescription: description,
+		CommunityDescription: description,
 		PrivateKey:              s.identity,
 	}
 }
 
-func (s *OrganisationSuite) configNoMembershipOrgOnRequestChat() Config {
-	description := s.emptyOrganisationDescriptionWithChat()
-	description.Permissions.Access = protobuf.OrganisationPermissions_NO_MEMBERSHIP
-	description.Chats[testChatID1].Permissions.Access = protobuf.OrganisationPermissions_ON_REQUEST
+func (s *CommunitySuite) configNoMembershipOrgOnRequestChat() Config {
+	description := s.emptyCommunityDescriptionWithChat()
+	description.Permissions.Access = protobuf.CommunityPermissions_NO_MEMBERSHIP
+	description.Chats[testChatID1].Permissions.Access = protobuf.CommunityPermissions_ON_REQUEST
 	return Config{
 		ID:                      &s.identity.PublicKey,
-		OrganisationDescription: description,
+		CommunityDescription: description,
 		PrivateKey:              s.identity,
 	}
 }
 
-func (s *OrganisationSuite) configOnRequestOrgOnRequestChat() Config {
-	description := s.emptyOrganisationDescriptionWithChat()
-	description.Permissions.Access = protobuf.OrganisationPermissions_ON_REQUEST
-	description.Chats[testChatID1].Permissions.Access = protobuf.OrganisationPermissions_ON_REQUEST
+func (s *CommunitySuite) configOnRequestOrgOnRequestChat() Config {
+	description := s.emptyCommunityDescriptionWithChat()
+	description.Permissions.Access = protobuf.CommunityPermissions_ON_REQUEST
+	description.Chats[testChatID1].Permissions.Access = protobuf.CommunityPermissions_ON_REQUEST
 	return Config{
 		ID:                      &s.identity.PublicKey,
-		OrganisationDescription: description,
+		CommunityDescription: description,
 		PrivateKey:              s.identity,
 	}
 }
 
-func (s *OrganisationSuite) configOnRequestOrgInvitationOnlyChat() Config {
-	description := s.emptyOrganisationDescriptionWithChat()
-	description.Permissions.Access = protobuf.OrganisationPermissions_ON_REQUEST
-	description.Chats[testChatID1].Permissions.Access = protobuf.OrganisationPermissions_INVITATION_ONLY
+func (s *CommunitySuite) configOnRequestOrgInvitationOnlyChat() Config {
+	description := s.emptyCommunityDescriptionWithChat()
+	description.Permissions.Access = protobuf.CommunityPermissions_ON_REQUEST
+	description.Chats[testChatID1].Permissions.Access = protobuf.CommunityPermissions_INVITATION_ONLY
 	return Config{
 		ID:                      &s.identity.PublicKey,
-		OrganisationDescription: description,
+		CommunityDescription: description,
 		PrivateKey:              s.identity,
 	}
 }
 
-func (s *OrganisationSuite) configOnRequestOrgNoMembershipChat() Config {
-	description := s.emptyOrganisationDescriptionWithChat()
-	description.Permissions.Access = protobuf.OrganisationPermissions_ON_REQUEST
-	description.Chats[testChatID1].Permissions.Access = protobuf.OrganisationPermissions_NO_MEMBERSHIP
+func (s *CommunitySuite) configOnRequestOrgNoMembershipChat() Config {
+	description := s.emptyCommunityDescriptionWithChat()
+	description.Permissions.Access = protobuf.CommunityPermissions_ON_REQUEST
+	description.Chats[testChatID1].Permissions.Access = protobuf.CommunityPermissions_NO_MEMBERSHIP
 	return Config{
 		ID:                      &s.identity.PublicKey,
-		OrganisationDescription: description,
+		CommunityDescription: description,
 		PrivateKey:              s.identity,
 	}
 }
 
-func (s *OrganisationSuite) configChatENSOnly() Config {
-	description := s.emptyOrganisationDescriptionWithChat()
-	description.Permissions.Access = protobuf.OrganisationPermissions_ON_REQUEST
-	description.Chats[testChatID1].Permissions.Access = protobuf.OrganisationPermissions_ON_REQUEST
+func (s *CommunitySuite) configChatENSOnly() Config {
+	description := s.emptyCommunityDescriptionWithChat()
+	description.Permissions.Access = protobuf.CommunityPermissions_ON_REQUEST
+	description.Chats[testChatID1].Permissions.Access = protobuf.CommunityPermissions_ON_REQUEST
 	description.Chats[testChatID1].Permissions.EnsOnly = true
 	return Config{
 		ID:                      &s.identity.PublicKey,
-		OrganisationDescription: description,
+		CommunityDescription: description,
 		PrivateKey:              s.identity,
 	}
 }
 
-func (s *OrganisationSuite) configENSOnly() Config {
-	description := s.emptyOrganisationDescription()
-	description.Permissions.Access = protobuf.OrganisationPermissions_ON_REQUEST
+func (s *CommunitySuite) configENSOnly() Config {
+	description := s.emptyCommunityDescription()
+	description.Permissions.Access = protobuf.CommunityPermissions_ON_REQUEST
 	description.Permissions.EnsOnly = true
 	return Config{
 		ID:                      &s.identity.PublicKey,
-		OrganisationDescription: description,
+		CommunityDescription: description,
 		PrivateKey:              s.identity,
 	}
 }
 
-func (s *OrganisationSuite) config() Config {
+func (s *CommunitySuite) config() Config {
 	config := s.configOnRequestOrgInvitationOnlyChat()
 	return config
 }
 
-func (s *OrganisationSuite) buildOrganisationDescription() *protobuf.OrganisationDescription {
+func (s *CommunitySuite) buildCommunityDescription() *protobuf.CommunityDescription {
 	config := s.configOnRequestOrgInvitationOnlyChat()
-	desc := config.OrganisationDescription
+	desc := config.CommunityDescription
 	desc.Clock = 1
-	desc.Members = make(map[string]*protobuf.OrganisationMember)
-	desc.Members[s.member1Key] = &protobuf.OrganisationMember{}
-	desc.Members[s.member2Key] = &protobuf.OrganisationMember{}
-	desc.Chats[testChatID1].Members = make(map[string]*protobuf.OrganisationMember)
-	desc.Chats[testChatID1].Members[s.member1Key] = &protobuf.OrganisationMember{}
+	desc.Members = make(map[string]*protobuf.CommunityMember)
+	desc.Members[s.member1Key] = &protobuf.CommunityMember{}
+	desc.Members[s.member2Key] = &protobuf.CommunityMember{}
+	desc.Chats[testChatID1].Members = make(map[string]*protobuf.CommunityMember)
+	desc.Chats[testChatID1].Members[s.member1Key] = &protobuf.CommunityMember{}
 	return desc
 }
 
-func (s *OrganisationSuite) emptyPermissionsOrganisationDescription() *protobuf.OrganisationDescription {
-	desc := s.buildOrganisationDescription()
+func (s *CommunitySuite) emptyPermissionsCommunityDescription() *protobuf.CommunityDescription {
+	desc := s.buildCommunityDescription()
 	desc.Permissions = nil
 	return desc
 }
 
-func (s *OrganisationSuite) emptyChatPermissionsOrganisationDescription() *protobuf.OrganisationDescription {
-	desc := s.buildOrganisationDescription()
+func (s *CommunitySuite) emptyChatPermissionsCommunityDescription() *protobuf.CommunityDescription {
+	desc := s.buildCommunityDescription()
 	desc.Chats[testChatID1].Permissions = nil
 	return desc
 }
 
-func (s *OrganisationSuite) unknownOrgPermissionsOrganisationDescription() *protobuf.OrganisationDescription {
-	desc := s.buildOrganisationDescription()
-	desc.Permissions.Access = protobuf.OrganisationPermissions_UNKNOWN_ACCESS
+func (s *CommunitySuite) unknownOrgPermissionsCommunityDescription() *protobuf.CommunityDescription {
+	desc := s.buildCommunityDescription()
+	desc.Permissions.Access = protobuf.CommunityPermissions_UNKNOWN_ACCESS
 	return desc
 }
 
-func (s *OrganisationSuite) unknownChatPermissionsOrganisationDescription() *protobuf.OrganisationDescription {
-	desc := s.buildOrganisationDescription()
-	desc.Chats[testChatID1].Permissions.Access = protobuf.OrganisationPermissions_UNKNOWN_ACCESS
+func (s *CommunitySuite) unknownChatPermissionsCommunityDescription() *protobuf.CommunityDescription {
+	desc := s.buildCommunityDescription()
+	desc.Chats[testChatID1].Permissions.Access = protobuf.CommunityPermissions_UNKNOWN_ACCESS
 	return desc
 }
 
-func (s *OrganisationSuite) memberInChatNotInOrgOrganisationDescription() *protobuf.OrganisationDescription {
-	desc := s.buildOrganisationDescription()
-	desc.Chats[testChatID1].Members[s.member3Key] = &protobuf.OrganisationMember{}
+func (s *CommunitySuite) memberInChatNotInOrgCommunityDescription() *protobuf.CommunityDescription {
+	desc := s.buildCommunityDescription()
+	desc.Chats[testChatID1].Members[s.member3Key] = &protobuf.CommunityMember{}
 	return desc
 }
 
-func (s *OrganisationSuite) invitationOnlyOrgNoMembershipChatOrganisationDescription() *protobuf.OrganisationDescription {
-	desc := s.buildOrganisationDescription()
-	desc.Permissions.Access = protobuf.OrganisationPermissions_INVITATION_ONLY
-	desc.Chats[testChatID1].Permissions.Access = protobuf.OrganisationPermissions_NO_MEMBERSHIP
+func (s *CommunitySuite) invitationOnlyOrgNoMembershipChatCommunityDescription() *protobuf.CommunityDescription {
+	desc := s.buildCommunityDescription()
+	desc.Permissions.Access = protobuf.CommunityPermissions_INVITATION_ONLY
+	desc.Chats[testChatID1].Permissions.Access = protobuf.CommunityPermissions_NO_MEMBERSHIP
 	return desc
 }
 
-func (s *OrganisationSuite) invitationOnlyOrgOnRequestChatOrganisationDescription() *protobuf.OrganisationDescription {
-	desc := s.buildOrganisationDescription()
-	desc.Permissions.Access = protobuf.OrganisationPermissions_INVITATION_ONLY
-	desc.Chats[testChatID1].Permissions.Access = protobuf.OrganisationPermissions_ON_REQUEST
+func (s *CommunitySuite) invitationOnlyOrgOnRequestChatCommunityDescription() *protobuf.CommunityDescription {
+	desc := s.buildCommunityDescription()
+	desc.Permissions.Access = protobuf.CommunityPermissions_INVITATION_ONLY
+	desc.Chats[testChatID1].Permissions.Access = protobuf.CommunityPermissions_ON_REQUEST
 	return desc
 }
 
-func (s *OrganisationSuite) onRequestOrgNoMembershipChatOrganisationDescription() *protobuf.OrganisationDescription {
-	desc := s.buildOrganisationDescription()
-	desc.Permissions.Access = protobuf.OrganisationPermissions_ON_REQUEST
-	desc.Chats[testChatID1].Permissions.Access = protobuf.OrganisationPermissions_NO_MEMBERSHIP
+func (s *CommunitySuite) onRequestOrgNoMembershipChatCommunityDescription() *protobuf.CommunityDescription {
+	desc := s.buildCommunityDescription()
+	desc.Permissions.Access = protobuf.CommunityPermissions_ON_REQUEST
+	desc.Chats[testChatID1].Permissions.Access = protobuf.CommunityPermissions_NO_MEMBERSHIP
 	return desc
 }
 
-func (s *OrganisationSuite) buildOrganisation(owner *ecdsa.PublicKey) *Organisation {
+func (s *CommunitySuite) buildCommunity(owner *ecdsa.PublicKey) *Community {
 
 	config := s.config()
 	config.ID = owner
-	config.OrganisationDescription = s.buildOrganisationDescription()
+	config.CommunityDescription = s.buildCommunityDescription()
 
 	org, err := New(config)
 	s.Require().NoError(err)
 	return org
 }
 
-func (s *OrganisationSuite) identicalOrganisationDescription(org *Organisation) *protobuf.OrganisationDescription {
-	description := proto.Clone(org.config.OrganisationDescription).(*protobuf.OrganisationDescription)
+func (s *CommunitySuite) identicalCommunityDescription(org *Community) *protobuf.CommunityDescription {
+	description := proto.Clone(org.config.CommunityDescription).(*protobuf.CommunityDescription)
 	description.Clock++
 	return description
 }
 
-func (s *OrganisationSuite) oldOrganisationDescription(org *Organisation) *protobuf.OrganisationDescription {
-	description := proto.Clone(org.config.OrganisationDescription).(*protobuf.OrganisationDescription)
+func (s *CommunitySuite) oldCommunityDescription(org *Community) *protobuf.CommunityDescription {
+	description := proto.Clone(org.config.CommunityDescription).(*protobuf.CommunityDescription)
 	description.Clock--
 	delete(description.Members, s.member1Key)
 	delete(description.Chats[testChatID1].Members, s.member1Key)
 	return description
 }
 
-func (s *OrganisationSuite) removedMemberOrganisationDescription(org *Organisation) *protobuf.OrganisationDescription {
-	description := proto.Clone(org.config.OrganisationDescription).(*protobuf.OrganisationDescription)
+func (s *CommunitySuite) removedMemberCommunityDescription(org *Community) *protobuf.CommunityDescription {
+	description := proto.Clone(org.config.CommunityDescription).(*protobuf.CommunityDescription)
 	description.Clock++
 	delete(description.Members, s.member1Key)
 	delete(description.Chats[testChatID1].Members, s.member1Key)
 	return description
 }
 
-func (s *OrganisationSuite) addedMemberOrganisationDescription(org *Organisation) *protobuf.OrganisationDescription {
-	description := proto.Clone(org.config.OrganisationDescription).(*protobuf.OrganisationDescription)
+func (s *CommunitySuite) addedMemberCommunityDescription(org *Community) *protobuf.CommunityDescription {
+	description := proto.Clone(org.config.CommunityDescription).(*protobuf.CommunityDescription)
 	description.Clock++
-	description.Members[s.member3Key] = &protobuf.OrganisationMember{}
-	description.Chats[testChatID1].Members[s.member3Key] = &protobuf.OrganisationMember{}
+	description.Members[s.member3Key] = &protobuf.CommunityMember{}
+	description.Chats[testChatID1].Members[s.member3Key] = &protobuf.CommunityMember{}
 
 	return description
 }
 
-func (s *OrganisationSuite) addedChatOrganisationDescription(org *Organisation) *protobuf.OrganisationDescription {
-	description := proto.Clone(org.config.OrganisationDescription).(*protobuf.OrganisationDescription)
+func (s *CommunitySuite) addedChatCommunityDescription(org *Community) *protobuf.CommunityDescription {
+	description := proto.Clone(org.config.CommunityDescription).(*protobuf.CommunityDescription)
 	description.Clock++
-	description.Members[s.member3Key] = &protobuf.OrganisationMember{}
-	description.Chats[testChatID2] = &protobuf.OrganisationChat{Permissions: &protobuf.OrganisationPermissions{Access: protobuf.OrganisationPermissions_INVITATION_ONLY}, Members: make(map[string]*protobuf.OrganisationMember)}
-	description.Chats[testChatID2].Members[s.member3Key] = &protobuf.OrganisationMember{}
+	description.Members[s.member3Key] = &protobuf.CommunityMember{}
+	description.Chats[testChatID2] = &protobuf.CommunityChat{Permissions: &protobuf.CommunityPermissions{Access: protobuf.CommunityPermissions_INVITATION_ONLY}, Members: make(map[string]*protobuf.CommunityMember)}
+	description.Chats[testChatID2].Members[s.member3Key] = &protobuf.CommunityMember{}
 
 	return description
 }
 
-func (s *OrganisationSuite) removedChatOrganisationDescription(org *Organisation) *protobuf.OrganisationDescription {
-	description := proto.Clone(org.config.OrganisationDescription).(*protobuf.OrganisationDescription)
+func (s *CommunitySuite) removedChatCommunityDescription(org *Community) *protobuf.CommunityDescription {
+	description := proto.Clone(org.config.CommunityDescription).(*protobuf.CommunityDescription)
 	description.Clock++
 	delete(description.Chats, testChatID1)
 

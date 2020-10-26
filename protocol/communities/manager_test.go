@@ -1,4 +1,4 @@
-package organisations
+package communities
 
 import (
 	"testing"
@@ -28,25 +28,25 @@ func (s *ManagerSuite) SetupTest() {
 	s.manager = m
 }
 
-func (s *ManagerSuite) TestCreateOrganisation() {
-	description := &protobuf.OrganisationDescription{
-		Permissions: &protobuf.OrganisationPermissions{
-			Access: protobuf.OrganisationPermissions_NO_MEMBERSHIP,
+func (s *ManagerSuite) TestCreateCommunity() {
+	description := &protobuf.CommunityDescription{
+		Permissions: &protobuf.CommunityPermissions{
+			Access: protobuf.CommunityPermissions_NO_MEMBERSHIP,
 		},
 		Identity: &protobuf.ChatIdentity{
 			DisplayName: "status",
-			Description: "status organisation description",
+			Description: "status community description",
 		},
 	}
 
-	organisation, err := s.manager.CreateOrganisation(description)
+	community, err := s.manager.CreateCommunity(description)
 	s.Require().NoError(err)
-	s.Require().NotNil(organisation)
+	s.Require().NotNil(community)
 
-	organisations, err := s.manager.All()
+	communities, err := s.manager.All()
 	s.Require().NoError(err)
-	s.Require().Len(organisations, 1)
-	s.Require().Equal(organisation.ID(), organisations[0].ID())
-	s.Require().Equal(organisation.PrivateKey(), organisations[0].PrivateKey())
-	s.Require().True(proto.Equal(organisation.config.OrganisationDescription, organisations[0].config.OrganisationDescription))
+	s.Require().Len(communities, 1)
+	s.Require().Equal(community.ID(), communities[0].ID())
+	s.Require().Equal(community.PrivateKey(), communities[0].PrivateKey())
+	s.Require().True(proto.Equal(community.config.CommunityDescription, communities[0].config.CommunityDescription))
 }

@@ -1,4 +1,4 @@
-package organisations
+package communities
 
 import (
 	"crypto/ecdsa"
@@ -37,8 +37,8 @@ func NewManager(db *sql.DB, logger *zap.Logger) (*Manager, error) {
 }
 
 type Subscription struct {
-	Organisation *Organisation
-	Invitation   *protobuf.OrganisationInvitation
+	Community *Community
+	Invitation   *protobuf.CommunityInvitation
 }
 
 func (m *Manager) Subscribe() chan *Subscription {
@@ -65,21 +65,21 @@ func (m *Manager) publish(subscription *Subscription) {
 	return
 }
 
-func (m *Manager) All() ([]*Organisation, error) {
-	return m.persistence.AllOrganisations()
+func (m *Manager) All() ([]*Community, error) {
+	return m.persistence.AllCommunities()
 }
 
-func (m *Manager) Joined() ([]*Organisation, error) {
-	return m.persistence.JoinedOrganisations()
+func (m *Manager) Joined() ([]*Community, error) {
+	return m.persistence.JoinedCommunities()
 }
 
-func (m *Manager) Created() ([]*Organisation, error) {
-	return m.persistence.CreatedOrganisations()
+func (m *Manager) Created() ([]*Community, error) {
+	return m.persistence.CreatedCommunities()
 }
 
-// CreateOrganisation takes a description, generates an ID for it, saves it and return it
-func (m *Manager) CreateOrganisation(description *protobuf.OrganisationDescription) (*Organisation, error) {
-	err := ValidateOrganisationDescription(description)
+// CreateCommunity takes a description, generates an ID for it, saves it and return it
+func (m *Manager) CreateCommunity(description *protobuf.CommunityDescription) (*Community, error) {
+	err := ValidateCommunityDescription(description)
 	if err != nil {
 		return nil, err
 	}
@@ -96,24 +96,24 @@ func (m *Manager) CreateOrganisation(description *protobuf.OrganisationDescripti
 		PrivateKey:              key,
 		Logger:                  m.logger,
 		Joined:                  true,
-		OrganisationDescription: description,
+		CommunityDescription: description,
 	}
 	org, err := New(config)
 	if err != nil {
 		return nil, err
 	}
 
-	err = m.persistence.SaveOrganisation(org)
+	err = m.persistence.SaveCommunity(org)
 	if err != nil {
 		return nil, err
 	}
 
-	m.publish(&Subscription{Organisation: org})
+	m.publish(&Subscription{Community: org})
 
 	return org, nil
 }
 
-func (m *Manager) CreateChat(idString string, chat *protobuf.OrganisationChat) (*Organisation, *OrganisationChanges, error) {
+func (m *Manager) CreateChat(idString string, chat *protobuf.CommunityChat) (*Community, *CommunityChanges, error) {
 	org, err := m.GetByIDString(idString)
 	if err != nil {
 		return nil, nil, err
@@ -128,18 +128,18 @@ func (m *Manager) CreateChat(idString string, chat *protobuf.OrganisationChat) (
 	}
 
 	m.logger.Debug("SAVING", zap.Any("ORG", org))
-	err = m.persistence.SaveOrganisation(org)
+	err = m.persistence.SaveCommunity(org)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	// Advertise changes
-	m.publish(&Subscription{Organisation: org})
+	m.publish(&Subscription{Community: org})
 
 	return org, changes, nil
 }
 
-func (m *Manager) HandleOrganisationDescriptionMessage(signer *ecdsa.PublicKey, description *protobuf.OrganisationDescription, payload []byte) (*Organisation, error) {
+func (m *Manager) HandleCommunityDescriptionMessage(signer *ecdsa.PublicKey, description *protobuf.CommunityDescription, payload []byte) (*Community, error) {
 	id := crypto.CompressPubkey(signer)
 	org, err := m.persistence.GetByID(id)
 	if err != nil {
@@ -147,11 +147,11 @@ func (m *Manager) HandleOrganisationDescriptionMessage(signer *ecdsa.PublicKey, 
 	}
 
 	if org == nil {
-		m.logger.Debug("initializing new organisation")
+		m.logger.Debug("initializing new community")
 		config := Config{
-			OrganisationDescription:          description,
+			CommunityDescription:          description,
 			Logger:                           m.logger,
-			MarshaledOrganisationDescription: payload,
+			MarshaledCommunityDescription: payload,
 			ID:                               signer,
 		}
 
@@ -161,12 +161,12 @@ func (m *Manager) HandleOrganisationDescriptionMessage(signer *ecdsa.PublicKey, 
 		}
 	}
 
-	_, err = org.HandleOrganisationDescription(signer, description, payload)
+	_, err = org.HandleCommunityDescription(signer, description, payload)
 	if err != nil {
 		return nil, err
 	}
 
-	err = m.persistence.SaveOrganisation(org)
+	err = m.persistence.SaveCommunity(org)
 	if err != nil {
 		return nil, err
 	}
@@ -174,10 +174,10 @@ func (m *Manager) HandleOrganisationDescriptionMessage(signer *ecdsa.PublicKey, 
 	return org, nil
 }
 
-func (m *Manager) HandleOrganisationInvitation(signer *ecdsa.PublicKey, invitation *protobuf.OrganisationInvitation, payload []byte) (*Organisation, error) {
-	m.logger.Debug("Handling wrapped organisation description message")
+func (m *Manager) HandleCommunityInvitation(signer *ecdsa.PublicKey, invitation *protobuf.CommunityInvitation, payload []byte) (*Community, error) {
+	m.logger.Debug("Handling wrapped community description message")
 
-	org, err := m.HandleWrappedOrganisationDescriptionMessage(payload)
+	org, err := m.HandleWrappedCommunityDescriptionMessage(payload)
 	if err != nil {
 		return nil, err
 	}
@@ -187,15 +187,15 @@ func (m *Manager) HandleOrganisationInvitation(signer *ecdsa.PublicKey, invitati
 	return org, nil
 }
 
-func (m *Manager) HandleWrappedOrganisationDescriptionMessage(payload []byte) (*Organisation, error) {
-	m.logger.Debug("Handling wrapped organisation description message")
+func (m *Manager) HandleWrappedCommunityDescriptionMessage(payload []byte) (*Community, error) {
+	m.logger.Debug("Handling wrapped community description message")
 
 	applicationMetadataMessage := &protobuf.ApplicationMetadataMessage{}
 	err := proto.Unmarshal(payload, applicationMetadataMessage)
 	if err != nil {
 		return nil, err
 	}
-	if applicationMetadataMessage.Type != protobuf.ApplicationMetadataMessage_ORGANISATION_DESCRIPTION {
+	if applicationMetadataMessage.Type != protobuf.ApplicationMetadataMessage_COMMUNITY_DESCRIPTION {
 		return nil, ErrInvalidMessage
 	}
 	signer, err := applicationMetadataMessage.RecoverKey()
@@ -203,17 +203,17 @@ func (m *Manager) HandleWrappedOrganisationDescriptionMessage(payload []byte) (*
 		return nil, err
 	}
 
-	description := &protobuf.OrganisationDescription{}
+	description := &protobuf.CommunityDescription{}
 
 	err = proto.Unmarshal(applicationMetadataMessage.Payload, description)
 	if err != nil {
 		return nil, err
 	}
 
-	return m.HandleOrganisationDescriptionMessage(signer, description, payload)
+	return m.HandleCommunityDescriptionMessage(signer, description, payload)
 }
 
-func (m *Manager) JoinOrganisation(idString string) (*Organisation, error) {
+func (m *Manager) JoinCommunity(idString string) (*Community, error) {
 	org, err := m.GetByIDString(idString)
 	if err != nil {
 		return nil, err
@@ -223,14 +223,14 @@ func (m *Manager) JoinOrganisation(idString string) (*Organisation, error) {
 	}
 	org.Join()
 	m.logger.Debug("SAVING", zap.Any("ORG", org))
-	err = m.persistence.SaveOrganisation(org)
+	err = m.persistence.SaveCommunity(org)
 	if err != nil {
 		return nil, err
 	}
 	return org, nil
 }
 
-func (m *Manager) LeaveOrganisation(idString string) (*Organisation, error) {
+func (m *Manager) LeaveCommunity(idString string) (*Community, error) {
 	org, err := m.GetByIDString(idString)
 	if err != nil {
 		return nil, err
@@ -240,14 +240,14 @@ func (m *Manager) LeaveOrganisation(idString string) (*Organisation, error) {
 	}
 	org.Leave()
 	m.logger.Debug("SAVING", zap.Any("ORG", org))
-	err = m.persistence.SaveOrganisation(org)
+	err = m.persistence.SaveCommunity(org)
 	if err != nil {
 		return nil, err
 	}
 	return org, nil
 }
 
-func (m *Manager) InviteUserToOrganisation(idString string, pk *ecdsa.PublicKey) (*Organisation, error) {
+func (m *Manager) InviteUserToCommunity(idString string, pk *ecdsa.PublicKey) (*Community, error) {
 	org, err := m.GetByIDString(idString)
 	if err != nil {
 		return nil, err
@@ -261,17 +261,17 @@ func (m *Manager) InviteUserToOrganisation(idString string, pk *ecdsa.PublicKey)
 		return nil, err
 	}
 
-	err = m.persistence.SaveOrganisation(org)
+	err = m.persistence.SaveCommunity(org)
 	if err != nil {
 		return nil, err
 	}
 
-	m.publish(&Subscription{Organisation: org, Invitation: invitation})
+	m.publish(&Subscription{Community: org, Invitation: invitation})
 
 	return org, nil
 }
 
-func (m *Manager) GetByIDString(idString string) (*Organisation, error) {
+func (m *Manager) GetByIDString(idString string) (*Community, error) {
 	id, err := types.DecodeHex(idString)
 	if err != nil {
 		return nil, err

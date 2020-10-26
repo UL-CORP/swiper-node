@@ -8,7 +8,7 @@ import (
 	"github.com/status-im/status-go/eth-node/crypto"
 	"github.com/status-im/status-go/eth-node/types"
 	"github.com/status-im/status-go/protocol/common"
-	"github.com/status-im/status-go/protocol/organisations"
+	"github.com/status-im/status-go/protocol/communities"
 	"github.com/status-im/status-go/protocol/protobuf"
 	v1protocol "github.com/status-im/status-go/protocol/v1"
 )
@@ -29,7 +29,7 @@ const (
 	ChatTypePublic
 	ChatTypePrivateGroupChat
 	ChatTypeProfile
-	ChatTypeOrganisationChat
+	ChatTypeCommunityChat
 )
 
 const pkStringLength = 68
@@ -78,8 +78,9 @@ type Chat struct {
 
 	// Public key of user profile
 	Profile string `json:"profile,omitempty"`
-	// OrganisationID is the id of the organisation it belongs to
-	OrganisationID string `json:"organisationId,omitempty"`
+
+	// CommunityID is the id of the community it belongs to
+	CommunityID string `json:"communityId,omitempty"`
 }
 
 func (c *Chat) PublicKey() (*ecdsa.PublicKey, error) {
@@ -102,9 +103,9 @@ func (c *Chat) OneToOne() bool {
 	return c.ChatType == ChatTypeOneToOne
 }
 
-// Strips out the local prefix of the organisation-id
-func (c *Chat) OrganisationChatID() string {
-	if c.ChatType != ChatTypeOrganisationChat {
+// Strips out the local prefix of the community-id
+func (c *Chat) CommunityChatID() string {
+	if c.ChatType != ChatTypeCommunityChat {
 		return c.ID
 	}
 
@@ -268,29 +269,29 @@ func CreateOneToOneChat(name string, publicKey *ecdsa.PublicKey, timesource comm
 	}
 }
 
-func CreateOrganisationChat(orgID, chatID string, orgChat *protobuf.OrganisationChat, timesource common.TimeSource) Chat {
+func CreateCommunityChat(orgID, chatID string, orgChat *protobuf.CommunityChat, timesource common.TimeSource) Chat {
 	color := orgChat.Identity.Color
 	if color == "" {
 		color = chatColors[rand.Intn(len(chatColors))]
 	}
 
 	return Chat{
-		OrganisationID: orgID,
-		Name:           orgChat.Identity.DisplayName,
-		Active:         true,
-		Color:          color,
-		ID:             orgID + chatID,
-		Timestamp:      int64(timesource.GetCurrentTime()),
-		ChatType:       ChatTypeOrganisationChat,
+		CommunityID: orgID,
+		Name:        orgChat.Identity.DisplayName,
+		Active:      true,
+		Color:       color,
+		ID:          orgID + chatID,
+		Timestamp:   int64(timesource.GetCurrentTime()),
+		ChatType:    ChatTypeCommunityChat,
 	}
 }
 
-func CreateOrganisationChats(org *organisations.Organisation, timesource common.TimeSource) []Chat {
+func CreateCommunityChats(org *communities.Community, timesource common.TimeSource) []Chat {
 	var chats []Chat
 	orgID := org.IDString()
 
 	for chatID, chat := range org.Chats() {
-		chats = append(chats, CreateOrganisationChat(orgID, chatID, chat, timesource))
+		chats = append(chats, CreateCommunityChat(orgID, chatID, chat, timesource))
 	}
 	return chats
 }

@@ -22,13 +22,13 @@ import (
 	enstypes "github.com/status-im/status-go/eth-node/types/ens"
 	"github.com/status-im/status-go/protocol/audio"
 	"github.com/status-im/status-go/protocol/common"
+	"github.com/status-im/status-go/protocol/communities"
 	"github.com/status-im/status-go/protocol/encryption"
 	"github.com/status-im/status-go/protocol/encryption/multidevice"
 	"github.com/status-im/status-go/protocol/encryption/sharedsecret"
 	"github.com/status-im/status-go/protocol/identity/alias"
 	"github.com/status-im/status-go/protocol/identity/identicon"
 	"github.com/status-im/status-go/protocol/images"
-	"github.com/status-im/status-go/protocol/organisations"
 	"github.com/status-im/status-go/protocol/protobuf"
 	"github.com/status-im/status-go/protocol/pushnotificationclient"
 	"github.com/status-im/status-go/protocol/pushnotificationserver"
@@ -49,7 +49,7 @@ var (
 	ErrNotImplemented = errors.New("not implemented")
 )
 
-var organisationAdvertiseIntervalSecond int64 = 60 * 60
+var communityAdvertiseIntervalSecond int64 = 60 * 60
 
 // Messenger is a entity managing chats and messages.
 // It acts as a bridge between the application and encryption
@@ -69,7 +69,7 @@ type Messenger struct {
 	handler                    *MessageHandler
 	pushNotificationClient     *pushnotificationclient.Client
 	pushNotificationServer     *pushnotificationserver.Server
-	organisationsManager       *organisations.Manager
+	communitiesManager         *communities.Manager
 	logger                     *zap.Logger
 	verifyTransactionClient    EthClient
 	featureFlags               common.FeatureFlags
@@ -90,21 +90,21 @@ type Messenger struct {
 }
 
 type MessengerResponse struct {
-	Chats               []*Chat                              `json:"chats,omitempty"`
-	RemovedChats        []string                             `json:"removedChats,omitempty"`
-	Messages            []*common.Message                    `json:"messages,omitempty"`
-	Contacts            []*Contact                           `json:"contacts,omitempty"`
-	Installations       []*multidevice.Installation          `json:"installations,omitempty"`
-	EmojiReactions      []*EmojiReaction                     `json:"emojiReactions,omitempty"`
-	Organisations       []*organisations.Organisation        `json:"organisations,omitempty"`
-	OrganisationChanges []*organisations.OrganisationChanges `json:"organisationsChanges,omitempty"`
-	Filters             []*transport.Filter                  `json:"filters,omitempty"`
-	RemovedFilters      []string                             `json:"removedFilters,omitempty"`
-	Invitations         []*GroupChatInvitation               `json:"invitations,omitempty"`
+	Chats            []*Chat                         `json:"chats,omitempty"`
+	RemovedChats     []string                        `json:"removedChats,omitempty"`
+	Messages         []*common.Message               `json:"messages,omitempty"`
+	Contacts         []*Contact                      `json:"contacts,omitempty"`
+	Installations    []*multidevice.Installation     `json:"installations,omitempty"`
+	EmojiReactions   []*EmojiReaction                `json:"emojiReactions,omitempty"`
+	Communities      []*communities.Community        `json:"communities,omitempty"`
+	CommunityChanges []*communities.CommunityChanges `json:"communitiesChanges,omitempty"`
+	Filters          []*transport.Filter             `json:"filters,omitempty"`
+	RemovedFilters   []string                        `json:"removedFilters,omitempty"`
+	Invitations      []*GroupChatInvitation          `json:"invitations,omitempty"`
 }
 
 func (m *MessengerResponse) IsEmpty() bool {
-	return len(m.Chats)+len(m.Messages)+len(m.Contacts)+len(m.Installations)+len(m.Invitations)+len(m.EmojiReactions)+len(m.Organisations)+len(m.Filters)+len(m.RemovedFilters)+len(m.RemovedChats) == 0
+	return len(m.Chats)+len(m.Messages)+len(m.Contacts)+len(m.Installations)+len(m.Invitations)+len(m.EmojiReactions)+len(m.Communities)+len(m.Filters)+len(m.RemovedFilters)+len(m.RemovedChats) == 0
 }
 
 type dbConfig struct {
@@ -234,12 +234,12 @@ func NewMessenger(
 
 	pushNotificationClient := pushnotificationclient.New(pushNotificationClientPersistence, pushNotificationClientConfig, processor, &sqlitePersistence{db: database})
 
-	organisationsManager, err := organisations.NewManager(database, logger)
+	communitiesManager, err := communities.NewManager(database, logger)
 	if err != nil {
 		return nil, err
 	}
 
-	handler := newMessageHandler(identity, logger, &sqlitePersistence{db: database}, organisationsManager)
+	handler := newMessageHandler(identity, logger, &sqlitePersistence{db: database}, communitiesManager, transp)
 
 	messenger = &Messenger{
 		config:                     &c,
@@ -252,7 +252,7 @@ func NewMessenger(
 		handler:                    handler,
 		pushNotificationClient:     pushNotificationClient,
 		pushNotificationServer:     pushNotificationServer,
-		organisationsManager:       organisationsManager,
+		communitiesManager:         communitiesManager,
 		featureFlags:               c.featureFlags,
 		systemMessagesTranslations: c.systemMessagesTranslations,
 		allChats:                   make(map[string]*Chat),
@@ -267,7 +267,7 @@ func NewMessenger(
 		shutdownTasks: []func() error{
 			database.Close,
 			pushNotificationClient.Stop,
-			organisationsManager.Stop,
+			communitiesManager.Stop,
 			encryptionProtocol.Stop,
 			transp.ResetFilters,
 			transp.Stop,
@@ -317,7 +317,7 @@ func (m *Messenger) Start() error {
 	}
 
 	m.handleEncryptionLayerSubscriptions(subscriptions)
-	m.handleOrganisationsSubscription(m.organisationsManager.Subscribe())
+	m.handleCommunitiesSubscription(m.communitiesManager.Subscribe())
 	m.handleConnectionChange(m.online())
 	m.watchConnectionChange()
 	return nil
@@ -443,7 +443,7 @@ func (m *Messenger) handleEncryptionLayerSubscriptions(subscriptions *encryption
 	}()
 }
 
-func (m *Messenger) publishOrg(org *organisations.Organisation) error {
+func (m *Messenger) publishOrg(org *communities.Community) error {
 	m.logger.Debug("publishing org", zap.String("org-id", org.IDString()), zap.Any("org", org))
 	payload, err := org.MarshaledDescription()
 	if err != nil {
@@ -455,13 +455,13 @@ func (m *Messenger) publishOrg(org *organisations.Organisation) error {
 		Sender:  org.PrivateKey(),
 		// we don't want to wrap in an encryption layer message
 		SkipEncryption: true,
-		MessageType:    protobuf.ApplicationMetadataMessage_ORGANISATION_DESCRIPTION,
+		MessageType:    protobuf.ApplicationMetadataMessage_COMMUNITY_DESCRIPTION,
 	}
 	_, err = m.processor.SendPublic(context.Background(), org.IDString(), rawMessage)
 	return err
 }
 
-func (m *Messenger) publishOrgInvitation(org *organisations.Organisation, invitation *protobuf.OrganisationInvitation) error {
+func (m *Messenger) publishOrgInvitation(org *communities.Community, invitation *protobuf.CommunityInvitation) error {
 	m.logger.Debug("publishing org invitation", zap.String("org-id", org.IDString()), zap.Any("org", org))
 	pk, err := crypto.DecompressPubkey(invitation.PublicKey)
 	if err != nil {
@@ -478,14 +478,14 @@ func (m *Messenger) publishOrgInvitation(org *organisations.Organisation, invita
 		Sender:  org.PrivateKey(),
 		// we don't want to wrap in an encryption layer message
 		SkipEncryption: true,
-		MessageType:    protobuf.ApplicationMetadataMessage_ORGANISATION_INVITATION,
+		MessageType:    protobuf.ApplicationMetadataMessage_COMMUNITY_INVITATION,
 	}
 	_, err = m.processor.SendPrivate(context.Background(), pk, rawMessage)
 	return err
 }
 
-// handleOrganisationsSubscription handles events from organisations
-func (m *Messenger) handleOrganisationsSubscription(c chan *organisations.Subscription) {
+// handleCommunitiesSubscription handles events from communities
+func (m *Messenger) handleCommunitiesSubscription(c chan *communities.Subscription) {
 
 	var lastPublished int64
 	// We check every 5 minutes if we need to publish
@@ -498,15 +498,15 @@ func (m *Messenger) handleOrganisationsSubscription(c chan *organisations.Subscr
 				if !more {
 					return
 				}
-				if sub.Organisation != nil {
-					err := m.publishOrg(sub.Organisation)
+				if sub.Community != nil {
+					err := m.publishOrg(sub.Community)
 					if err != nil {
 						m.logger.Warn("failed to publish org", zap.Error(err))
 					}
 				}
 
 				if sub.Invitation != nil {
-					err := m.publishOrgInvitation(sub.Organisation, sub.Invitation)
+					err := m.publishOrgInvitation(sub.Community, sub.Invitation)
 					if err != nil {
 						m.logger.Warn("failed to publish org invitation", zap.Error(err))
 					}
@@ -520,11 +520,11 @@ func (m *Messenger) handleOrganisationsSubscription(c chan *organisations.Subscr
 				}
 
 				// If not enough time has passed since last advertisement, we skip this
-				if time.Now().Unix()-lastPublished < organisationAdvertiseIntervalSecond {
+				if time.Now().Unix()-lastPublished < communityAdvertiseIntervalSecond {
 					continue
 				}
 
-				orgs, err := m.organisationsManager.Created()
+				orgs, err := m.communitiesManager.Created()
 				if err != nil {
 					m.logger.Warn("failed to retrieve orgs", zap.Error(err))
 				}
@@ -602,11 +602,11 @@ func (m *Messenger) Init() error {
 		publicKeys    []*ecdsa.PublicKey
 	)
 
-	organisations, err := m.organisationsManager.Joined()
+	communities, err := m.communitiesManager.Joined()
 	if err != nil {
 		return err
 	}
-	for _, org := range organisations {
+	for _, org := range communities {
 		// the org advertise on the public topic derived by the pk
 		publicChatIDs = append(publicChatIDs, org.IDString())
 	}
@@ -630,7 +630,7 @@ func (m *Messenger) Init() error {
 		switch chat.ChatType {
 		case ChatTypePublic, ChatTypeProfile:
 			publicChatIDs = append(publicChatIDs, chat.ID)
-		case ChatTypeOrganisationChat:
+		case ChatTypeCommunityChat:
 			publicChatIDs = append(publicChatIDs, chat.ID)
 		case ChatTypeOneToOne:
 			pk, err := chat.PublicKey()
@@ -1558,24 +1558,24 @@ func (m *Messenger) Chats() []*Chat {
 	return chats
 }
 
-func (m *Messenger) Organisations() ([]*organisations.Organisation, error) {
-	return m.organisationsManager.All()
+func (m *Messenger) Communities() ([]*communities.Community, error) {
+	return m.communitiesManager.All()
 }
 
-func (m *Messenger) JoinOrganisation(organisationID string) (*MessengerResponse, error) {
+func (m *Messenger) JoinCommunity(communityID string) (*MessengerResponse, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
 	response := &MessengerResponse{}
 
-	org, err := m.organisationsManager.JoinOrganisation(organisationID)
+	org, err := m.communitiesManager.JoinCommunity(communityID)
 	if err != nil {
 		return nil, err
 	}
 
 	chatIDs := []string{org.IDString()}
 
-	chats := CreateOrganisationChats(org, m.getTimesource())
+	chats := CreateCommunityChats(org, m.getTimesource())
 
 	// Beware don't use `chat` as a reference
 	for i, chat := range chats {
@@ -1590,23 +1590,23 @@ func (m *Messenger) JoinOrganisation(organisationID string) (*MessengerResponse,
 	}
 
 	response.Filters = filters
-	response.Organisations = []*organisations.Organisation{org}
+	response.Communities = []*communities.Community{org}
 
 	return response, m.saveChats(response.Chats)
 }
 
 // TODO: Test this, make sure is actually removed
-func (m *Messenger) LeaveOrganisation(organisationID string) (*MessengerResponse, error) {
+func (m *Messenger) LeaveCommunity(communityID string) (*MessengerResponse, error) {
 	response := &MessengerResponse{}
 
-	org, err := m.organisationsManager.LeaveOrganisation(organisationID)
+	org, err := m.communitiesManager.LeaveCommunity(communityID)
 	if err != nil {
 		return nil, err
 	}
 
 	// Make chat inactive
 	for chatID, _ := range org.Chats() {
-		orgChatID := organisationID + chatID
+		orgChatID := communityID + chatID
 		err := m.DeleteChat(orgChatID)
 		if err != nil {
 			return nil, err
@@ -1615,24 +1615,24 @@ func (m *Messenger) LeaveOrganisation(organisationID string) (*MessengerResponse
 		response.RemovedFilters = append(response.RemovedFilters, orgChatID)
 	}
 
-	err = m.transport.RemoveFilterByChatID(organisationID)
+	err = m.transport.RemoveFilterByChatID(communityID)
 	if err != nil {
 		return nil, err
 	}
-	response.RemovedFilters = append(response.RemovedFilters, organisationID)
-	response.Organisations = []*organisations.Organisation{org}
+	response.RemovedFilters = append(response.RemovedFilters, communityID)
+	response.Communities = []*communities.Community{org}
 	return response, nil
 }
 
-func (m *Messenger) CreateOrganisationChat(orgID string, c *protobuf.OrganisationChat) (*MessengerResponse, error) {
-	org, changes, err := m.organisationsManager.CreateChat(orgID, c)
+func (m *Messenger) CreateCommunityChat(orgID string, c *protobuf.CommunityChat) (*MessengerResponse, error) {
+	org, changes, err := m.communitiesManager.CreateChat(orgID, c)
 	if err != nil {
 		return nil, err
 	}
 	var chats []*Chat
 	var chatIDs []string
 	for chatID, chat := range changes.ChatsAdded {
-		c := CreateOrganisationChat(org.IDString(), chatID, chat, m.getTimesource())
+		c := CreateCommunityChat(org.IDString(), chatID, chat, m.getTimesource())
 		chats = append(chats, &c)
 		chatIDs = append(chatIDs, c.ID)
 	}
@@ -1644,37 +1644,37 @@ func (m *Messenger) CreateOrganisationChat(orgID string, c *protobuf.Organisatio
 	}
 
 	return &MessengerResponse{
-		Organisations:       []*organisations.Organisation{org},
-		Chats:               chats,
-		Filters:             filters,
-		OrganisationChanges: []*organisations.OrganisationChanges{changes},
+		Communities:      []*communities.Community{org},
+		Chats:            chats,
+		Filters:          filters,
+		CommunityChanges: []*communities.CommunityChanges{changes},
 	}, m.saveChats(chats)
 }
 
-func (m *Messenger) CreateOrganisation(description *protobuf.OrganisationDescription) (*MessengerResponse, error) {
-	org, err := m.organisationsManager.CreateOrganisation(description)
+func (m *Messenger) CreateCommunity(description *protobuf.CommunityDescription) (*MessengerResponse, error) {
+	org, err := m.communitiesManager.CreateCommunity(description)
 	if err != nil {
 		return nil, err
 	}
 
 	return &MessengerResponse{
-		Organisations: []*organisations.Organisation{org},
+		Communities: []*communities.Community{org},
 	}, nil
 }
 
-func (m *Messenger) InviteUserToOrganisation(orgID, pkString string) (*MessengerResponse, error) {
+func (m *Messenger) InviteUserToCommunity(orgID, pkString string) (*MessengerResponse, error) {
 	publicKey, err := common.HexToPubkey(pkString)
 	if err != nil {
 		return nil, err
 	}
 
-	org, err := m.organisationsManager.InviteUserToOrganisation(orgID, publicKey)
+	org, err := m.communitiesManager.InviteUserToCommunity(orgID, publicKey)
 	if err != nil {
 		return nil, err
 	}
 
 	return &MessengerResponse{
-		Organisations: []*organisations.Organisation{org},
+		Communities: []*communities.Community{org},
 	}, nil
 }
 
@@ -1911,9 +1911,9 @@ func (m *Messenger) dispatchMessage(ctx context.Context, spec common.RawMessage)
 		if err != nil {
 			return nil, err
 		}
-	case ChatTypeOrganisationChat:
+	case ChatTypeCommunityChat:
 		// TODO: add grant
-		canPost, err := m.organisationsManager.CanPost(&m.identity.PublicKey, chat.OrganisationID, chat.OrganisationChatID(), nil)
+		canPost, err := m.communitiesManager.CanPost(&m.identity.PublicKey, chat.CommunityID, chat.CommunityChatID(), nil)
 		if err != nil {
 			return nil, err
 		}
@@ -1923,7 +1923,7 @@ func (m *Messenger) dispatchMessage(ctx context.Context, spec common.RawMessage)
 			return nil, errors.New("can't post on chat")
 		}
 
-		logger.Debug("sending organisation chat message", zap.String("chatName", chat.Name))
+		logger.Debug("sending community chat message", zap.String("chatName", chat.Name))
 		id, err = m.processor.SendPublic(ctx, chat.ID, spec)
 		if err != nil {
 			return nil, err
@@ -2002,23 +2002,23 @@ func (m *Messenger) SendChatMessage(ctx context.Context, message *common.Message
 		}
 		message.Payload = &protobuf.ChatMessage_Image{Image: &image}
 
-	} else if len(message.OrganisationID) != 0 {
-		organisation, err := m.organisationsManager.GetByIDString(message.OrganisationID)
+	} else if len(message.CommunityID) != 0 {
+		community, err := m.communitiesManager.GetByIDString(message.CommunityID)
 		if err != nil {
 			return nil, err
 		}
 
-		if organisation == nil {
-			return nil, errors.New("organisation not found")
+		if community == nil {
+			return nil, errors.New("community not found")
 		}
 
-		wrappedOrganisation, err := organisation.ToBytes()
+		wrappedCommunity, err := community.ToBytes()
 		if err != nil {
 			return nil, err
 		}
-		message.Payload = &protobuf.ChatMessage_Organisation{Organisation: wrappedOrganisation}
+		message.Payload = &protobuf.ChatMessage_Community{Community: wrappedCommunity}
 
-		message.ContentType = protobuf.ChatMessage_ORGANISATION
+		message.ContentType = protobuf.ChatMessage_COMMUNITY
 
 	} else if len(message.AudioPath) != 0 {
 		file, err := os.Open(message.AudioPath)
@@ -2716,19 +2716,19 @@ func (m *Messenger) handleRetrievedMessages(chatWithMessages map[transport.Filte
 							continue
 						}
 
-					case protobuf.OrganisationDescription:
-						logger.Debug("Handling OrganisationDescription")
-						err = m.handler.HandleOrganisationDescription(messageState, publicKey, msg.ParsedMessage.Interface().(protobuf.OrganisationDescription), msg.DecryptedPayload)
+					case protobuf.CommunityDescription:
+						logger.Debug("Handling CommunityDescription")
+						err = m.handler.HandleCommunityDescription(messageState, publicKey, msg.ParsedMessage.Interface().(protobuf.CommunityDescription), msg.DecryptedPayload)
 						if err != nil {
-							logger.Warn("failed to handle OrganisationDescription", zap.Error(err))
+							logger.Warn("failed to handle CommunityDescription", zap.Error(err))
 							continue
 						}
-					case protobuf.OrganisationInvitation:
-						logger.Debug("Handling OrganisationInvitation")
-						invitation := msg.ParsedMessage.Interface().(protobuf.OrganisationInvitation)
-						err = m.handler.HandleOrganisationInvitation(messageState, publicKey, invitation, invitation.OrganisationDescription)
+					case protobuf.CommunityInvitation:
+						logger.Debug("Handling CommunityInvitation")
+						invitation := msg.ParsedMessage.Interface().(protobuf.CommunityInvitation)
+						err = m.handler.HandleCommunityInvitation(messageState, publicKey, invitation, invitation.CommunityDescription)
 						if err != nil {
-							logger.Warn("failed to handle OrganisationDescription", zap.Error(err))
+							logger.Warn("failed to handle CommunityDescription", zap.Error(err))
 							continue
 						}
 					default:
@@ -4097,10 +4097,10 @@ func (m *Messenger) encodeChatEntity(chat *Chat, message common.ChatEntity) ([]b
 		if err != nil {
 			return nil, err
 		}
-	case ChatTypeOrganisationChat:
-		l.Debug("sending organisation chat message", zap.String("chatName", chat.Name))
+	case ChatTypeCommunityChat:
+		l.Debug("sending community chat message", zap.String("chatName", chat.Name))
 		// TODO: add grant
-		message.SetMessageType(protobuf.MessageType_ORGANISATION_CHAT)
+		message.SetMessageType(protobuf.MessageType_COMMUNITY_CHAT)
 		encodedMessage, err = proto.Marshal(message.GetProtobuf())
 		if err != nil {
 			return nil, err
